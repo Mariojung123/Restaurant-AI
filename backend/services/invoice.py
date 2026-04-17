@@ -1,3 +1,5 @@
+import difflib
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -10,6 +12,27 @@ def _find_ingredient_by_name(db: Session, name: str):
         .filter(func.lower(Ingredient.name) == name.lower().strip())
         .first()
     )
+
+
+def fuzzy_match_ingredient(db: Session, name: str) -> tuple:
+    """Return best-matching Ingredient via SequenceMatcher. Threshold 0.7."""
+    ingredients = db.query(Ingredient).all()
+    if not ingredients:
+        return (None, 0.0)
+
+    best_score = 0.0
+    best_match = None
+    for ingredient in ingredients:
+        score = difflib.SequenceMatcher(
+            None, name.lower().strip(), ingredient.name.lower().strip()
+        ).ratio()
+        if score > best_score:
+            best_score = score
+            best_match = ingredient
+
+    if best_score >= 0.7:
+        return (best_match, best_score)
+    return (None, 0.0)
 
 
 def _create_ingredient(db: Session, name: str, unit: str) -> Ingredient:
@@ -43,6 +66,7 @@ def _create_log(
 def process_invoice_items(items: list[dict], supplier, db: Session) -> list[dict]:
     """Match or create Ingredients for each line item and create InventoryLogs.
 
+    If item has ingredient_id, use that directly (confirm flow).
     Caller must call db.commit() after this returns.
     """
     results = []
@@ -51,8 +75,15 @@ def process_invoice_items(items: list[dict], supplier, db: Session) -> list[dict
         quantity = float(item["quantity"])
         unit = item.get("unit") or "unit"
         unit_price = item.get("unit_price")
+        ingredient_id = item.get("ingredient_id")
 
-        ingredient = _find_ingredient_by_name(db, name)
+        ingredient = None
+        if ingredient_id:
+            ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+
+        if not ingredient:
+            ingredient = _find_ingredient_by_name(db, name)
+
         action = "matched" if ingredient else "created"
         if not ingredient:
             ingredient = _create_ingredient(db, name, unit)

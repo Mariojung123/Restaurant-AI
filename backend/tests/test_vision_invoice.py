@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import func
 
 from models.database import Ingredient, InventoryLog
-from services.invoice import process_invoice_items
+from services.invoice import fuzzy_match_ingredient, process_invoice_items
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -146,3 +146,194 @@ def test_process_invoice_items_creates_log(db_session):
     assert log.change_type == "delivery"
     assert log.supplier == "Sea Co"
     assert log.quantity == 3.0
+
+
+# ── preview endpoint tests ────────────────────────────────────────────────────
+
+def _post_preview(client, content=b"fake-image", content_type="image/jpeg"):
+    return client.post(
+        "/api/vision/invoice/preview",
+        files={"file": ("invoice.jpg", content, content_type)},
+    )
+
+
+def test_preview_returns_fuzzy_match(client, db_session):
+    db_session.add(Ingredient(name="pvw-mozzarella-cheese-99", unit="kg", current_stock=2.0))
+    db_session.flush()
+
+    mock_resp = _make_invoice_json(
+        [{"name": "pvw-mozz-cheese-99", "quantity": 3.0, "unit": "kg",
+          "unit_price": None, "total_price": None}],
+        supplier="PvwSupplierUnique99",
+    )
+    with patch("routers.vision.parse_image_with_claude", return_value=mock_resp):
+        resp = _post_preview(client)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["duplicate_warning"] is False
+    item = body["items"][0]
+    assert item["suggested_match"] is not None
+    assert item["suggested_match"]["name"] == "pvw-mozzarella-cheese-99"
+    assert item["match_score"] >= 0.7
+
+
+def test_preview_no_match_below_threshold(client, db_session):
+    db_session.add(Ingredient(name="pvw-truffle-oil-99", unit="L", current_stock=1.0))
+    db_session.flush()
+
+    mock_resp = _make_invoice_json(
+        [{"name": "xyzxyzxyz888abc", "quantity": 1.0, "unit": "ea",
+          "unit_price": None, "total_price": None}],
+        supplier="PvwNoMatchSupplier99",
+    )
+    with patch("routers.vision.parse_image_with_claude", return_value=mock_resp):
+        resp = _post_preview(client)
+
+    assert resp.status_code == 200
+    item = resp.json()["items"][0]
+    assert item["suggested_match"] is None
+    assert item["match_score"] == 0.0
+
+
+def test_preview_no_db_writes(client, db_session):
+    count_before = db_session.query(Ingredient).count()
+    log_count_before = db_session.query(InventoryLog).count()
+
+    mock_resp = _make_invoice_json(
+        [{"name": "pvw-no-write-ingredient-99", "quantity": 5.0, "unit": "kg",
+          "unit_price": 3.0, "total_price": 15.0}],
+        supplier="PvwNoWriteSupplier99",
+    )
+    with patch("routers.vision.parse_image_with_claude", return_value=mock_resp):
+        _post_preview(client)
+
+    assert db_session.query(Ingredient).count() == count_before
+    assert db_session.query(InventoryLog).count() == log_count_before
+
+
+def test_preview_rejects_unsupported_type(client):
+    resp = _post_preview(client, content_type="application/pdf")
+    assert resp.status_code == 400
+
+
+# ── confirm endpoint tests ────────────────────────────────────────────────────
+
+def test_confirm_saves_included_items(client, db_session):
+    ing = Ingredient(name="cnf-chicken-breast-99", unit="kg", current_stock=5.0)
+    db_session.add(ing)
+    db_session.flush()
+
+    payload = {
+        "supplier": "CnfFarmCo99",
+        "invoice_date": "2024-05-10",
+        "items": [
+            {
+                "name": "cnf-chicken-breast-99",
+                "quantity": 10.0,
+                "unit": "kg",
+                "unit_price": 5.99,
+                "ingredient_id": ing.id,
+                "include": True,
+            },
+            {
+                "name": "cnf-unwanted-item-99",
+                "quantity": 2.0,
+                "unit": "ea",
+                "unit_price": 1.0,
+                "ingredient_id": None,
+                "include": False,
+            },
+        ],
+    }
+    resp = client.post("/api/vision/invoice/confirm", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items_processed"] == 1
+    assert body["items"][0]["action"] == "matched"
+
+    db_session.expire_all()
+    updated = db_session.query(Ingredient).filter_by(id=ing.id).first()
+    assert updated.current_stock == 15.0
+
+    excluded = db_session.query(Ingredient).filter_by(name="cnf-unwanted-item-99").first()
+    assert excluded is None
+
+
+def test_confirm_creates_new_ingredient_when_no_id(client, db_session):
+    payload = {
+        "supplier": "CnfHerbCo99",
+        "invoice_date": "2024-05-11",
+        "items": [
+            {
+                "name": "cnf-new-herb-mix-99",
+                "quantity": 1.0,
+                "unit": "bag",
+                "unit_price": 4.50,
+                "ingredient_id": None,
+                "include": True,
+            }
+        ],
+    }
+    resp = client.post("/api/vision/invoice/confirm", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items"][0]["action"] == "created"
+
+    created = db_session.query(Ingredient).filter_by(name="cnf-new-herb-mix-99").first()
+    assert created is not None
+    assert created.current_stock == 1.0
+
+
+def test_confirm_all_excluded_returns_zero(client, db_session):
+    payload = {
+        "supplier": "CnfNobody99",
+        "invoice_date": "2024-05-12",
+        "items": [
+            {
+                "name": "cnf-excluded-item-99",
+                "quantity": 1.0,
+                "unit": "ea",
+                "unit_price": None,
+                "ingredient_id": None,
+                "include": False,
+            }
+        ],
+    }
+    resp = client.post("/api/vision/invoice/confirm", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items_processed"] == 0
+    assert body["items"] == []
+
+
+# ── fuzzy match service unit test ─────────────────────────────────────────────
+
+def test_fuzzy_match_ingredient_exact(db_session):
+    db_session.add(Ingredient(name="fuz-chicken-breast-99", unit="kg", current_stock=0.0))
+    db_session.flush()
+
+    match, score = fuzzy_match_ingredient(db_session, "fuz-chicken-breast-99")
+    assert match is not None
+    assert score == 1.0
+
+
+def test_fuzzy_match_ingredient_partial(db_session):
+    db_session.add(Ingredient(name="fuz-mozzarella-cheese-99", unit="kg", current_stock=0.0))
+    db_session.flush()
+
+    match, score = fuzzy_match_ingredient(db_session, "fuz-mozz-cheese-99")
+    assert match is not None
+    assert score >= 0.7
+
+
+def test_fuzzy_match_ingredient_no_match(db_session):
+    db_session.add(Ingredient(name="fuz-olive-oil-99", unit="L", current_stock=0.0))
+    db_session.flush()
+
+    match, score = fuzzy_match_ingredient(db_session, "xyzxyzxyz999abc")
+    assert match is None
+    assert score == 0.0

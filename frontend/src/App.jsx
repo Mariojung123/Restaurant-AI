@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import Chat from './pages/Chat.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import Invoice from './pages/Invoice.jsx';
 import Recipe from './pages/Recipe.jsx';
 import Settings from './pages/Settings.jsx';
 
@@ -17,6 +18,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/recipe" element={<Recipe />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/invoice" element={<Invoice />} />
           <Route path="*" element={<Navigate to="/chat" replace />} />
         </Routes>
       </main>
