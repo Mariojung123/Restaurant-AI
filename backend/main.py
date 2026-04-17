@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import chat, inventory, vision, recipe
+from models.database import Base, engine
 
 
 app = FastAPI(
@@ -44,6 +45,11 @@ app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(inventory.router, prefix="/api/inventory", tags=["inventory"])
 app.include_router(vision.router, prefix="/api/vision", tags=["vision"])
 app.include_router(recipe.router, prefix="/api/recipe", tags=["recipe"])
+
+
+@app.on_event("startup")
+def init_db():
+    Base.metadata.create_all(bind=engine)
 
 
 @app.get("/")

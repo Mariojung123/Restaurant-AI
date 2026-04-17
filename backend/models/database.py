@@ -105,8 +105,9 @@ class RecipeIngredient(Base):
     ingredient_id = Column(
         Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False
     )
-    quantity = Column(Float, nullable=False, default=0.0)
+    quantity = Column(Float, nullable=True)  # null = vague amount ("조금", "약간")
     unit = Column(String(32), nullable=False, default="unit")
+    quantity_display = Column(Text, nullable=True)  # original natural language ("한 웅큼")
 
     recipe = relationship("Recipe", back_populates="ingredient_links")
     ingredient = relationship("Ingredient", back_populates="recipe_links")
@@ -143,6 +144,18 @@ class SalesLog(Base):
     sold_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     recipe = relationship("Recipe", back_populates="sales_logs")
+
+
+class ChatHistory(Base):
+    """Multi-turn conversation history for context-aware Claude responses."""
+
+    __tablename__ = "chat_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(64), nullable=False, index=True)
+    role = Column(String(16), nullable=False)  # "user" | "assistant"
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 def get_db():

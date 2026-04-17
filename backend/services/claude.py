@@ -7,6 +7,7 @@ Wraps the Anthropic SDK with two primary helpers:
 """
 
 import os
+import json
 from typing import Optional
 
 from anthropic import Anthropic
@@ -15,9 +16,10 @@ from anthropic import Anthropic
 # Model id used across the service. Update here to roll forward to a new Claude version.
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
-# Default system prompt reflecting the product persona: friendly Korean-speaking AI partner
+# Default system prompt reflecting the product persona: friendly multilingual AI partner
 DEFAULT_SYSTEM_PROMPT = (
-    "You are a friendly AI operations partner for a small Canadian restaurant owner. "
+    "You are a friendly AI operations partner for a small restaurant owner. "
+    "Always respond in the same language the user writes in. "
     "Speak warmly and concisely, like a trusted colleague on a messenger app. "
     "Help interpret sales, inventory, and ordering data, and proactively suggest next steps."
 )
@@ -64,6 +66,68 @@ def chat_with_claude(
         if text:
             parts.append(text)
     return "".join(parts).strip()
+
+
+_RECIPE_PARSE_SYSTEM = (
+    "You are a restaurant recipe analysis expert. "
+    "Parse ingredient lists and return only a valid JSON array. Never include any other text."
+)
+
+_RECIPE_PARSE_PROMPT = """Parse the following ingredient list into a JSON array.
+
+Rules:
+- name: ingredient name
+- quantity: estimated numeric value (float). For vague amounts like "a little", "some", "a handful" — estimate a reasonable quantity
+- unit: standard unit (g, ml, ea, tsp, tbsp, etc.)
+- quantity_display: original expression exactly as written
+- reasoning: friendly 1-2 sentence explanation for the estimate, written in the SAME LANGUAGE as the input
+
+Return format (JSON array only, no other text):
+[
+  {{
+    "name": "ingredient name",
+    "quantity": 15.0,
+    "unit": "g",
+    "quantity_display": "a handful",
+    "reasoning": "A loose handful of chives is typically around 15g!"
+  }}
+]
+
+Ingredient list:
+{ingredient_text}"""
+
+
+def parse_recipe_ingredients(ingredient_text: str) -> list[dict]:
+    """
+    Parse a natural language ingredient list into structured data with reasoning.
+
+    Returns a list of dicts with keys: name, quantity, unit, quantity_display, reasoning.
+    """
+    client = _get_client()
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=2048,
+        system=_RECIPE_PARSE_SYSTEM,
+        messages=[
+            {
+                "role": "user",
+                "content": _RECIPE_PARSE_PROMPT.format(ingredient_text=ingredient_text),
+            }
+        ],
+    )
+
+    raw = "".join(
+        getattr(block, "text", "") for block in response.content
+    ).strip()
+
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    return json.loads(raw)
 
 
 def parse_image_with_claude(

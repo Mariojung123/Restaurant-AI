@@ -19,6 +19,7 @@ from models.database import (
     SalesLog,
     get_db,
 )
+from services.claude import parse_recipe_ingredients
 
 
 router = APIRouter()
@@ -28,8 +29,25 @@ class RecipeIngredientIn(BaseModel):
     """Ingredient-to-recipe mapping payload."""
 
     ingredient_id: int
-    quantity: float
+    quantity: Optional[float] = None
     unit: str = "unit"
+    quantity_display: Optional[str] = None
+
+
+class ParseRequest(BaseModel):
+    """Natural language ingredient list to parse."""
+
+    ingredient_text: str
+
+
+class ParsedIngredient(BaseModel):
+    """Single parsed ingredient returned before user confirmation."""
+
+    name: str
+    quantity: Optional[float]
+    unit: str
+    quantity_display: str
+    reasoning: str
 
 
 class RecipeIn(BaseModel):
@@ -59,6 +77,16 @@ class SalesLogIn(BaseModel):
     recipe_id: int
     quantity: int = 1
     total_price: Optional[float] = None
+
+
+@router.post("/parse", response_model=list[ParsedIngredient])
+def parse_recipe(payload: ParseRequest) -> list[ParsedIngredient]:
+    """Parse a natural language ingredient list. Returns estimates + reasoning for user confirmation."""
+    try:
+        items = parse_recipe_ingredients(payload.ingredient_text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Claude parsing failed: {e}")
+    return [ParsedIngredient(**item) for item in items]
 
 
 @router.get("/", response_model=list[RecipeOut])
@@ -92,6 +120,7 @@ def create_recipe(payload: RecipeIn, db: Session = Depends(get_db)) -> RecipeOut
                 ingredient_id=link.ingredient_id,
                 quantity=link.quantity,
                 unit=link.unit,
+                quantity_display=link.quantity_display,
             )
         )
 
