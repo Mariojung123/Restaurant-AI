@@ -12,8 +12,8 @@ from services.prediction import forecast_all
 
 router = APIRouter()
 
-INVENTORY_KEYWORDS = {"재고", "stock", "inventory", "ingredient", "떨어", "소진", "남은"}
-SALES_KEYWORDS = {"판매", "sales", "sell", "sold", "잘 팔", "많이 팔", "revenue", "매출"}
+INVENTORY_KEYWORDS = {"재고", "stock", "inventory", "ingredient", "떨어", "소진", "남은", "남았", "얼마나", "몇 kg", "몇kg"}
+SALES_KEYWORDS = {"판매", "sales", "sell", "sold", "잘 팔", "많이 팔", "revenue", "매출", "팔렸", "팔린", "인기"}
 RECIPE_KEYWORDS = {"레시피", "recipe", "menu", "메뉴"}
 
 
@@ -48,18 +48,17 @@ def _build_context(db: Session, user_message: str) -> str:
     msg_lower = user_message.lower()
     blocks = []
 
-    if any(kw in msg_lower for kw in INVENTORY_KEYWORDS):
-        ingredients = db.query(Ingredient).all()
-        if ingredients:
-            forecasts = {f.ingredient_id: f for f in forecast_all(db)}
-            lines = ["Ingredient | Unit | Stock | Days Left | Needs Reorder"]
-            lines.append("-" * 60)
-            for ing in ingredients:
-                fc = forecasts.get(ing.id)
-                days = f"{fc.days_remaining:.1f}" if fc and fc.daily_consumption > 0 else "N/A"
-                reorder = "YES" if fc and fc.needs_reorder else "no"
-                lines.append(f"{ing.name} | {ing.unit} | {ing.current_stock} | {days} | {reorder}")
-            blocks.append("=== Inventory & Forecast ===\n" + "\n".join(lines))
+    ingredients = db.query(Ingredient).all()
+    if ingredients:
+        forecasts = {f.ingredient_id: f for f in forecast_all(db)}
+        lines = ["Ingredient | Unit | Stock | Days Left | Needs Reorder"]
+        lines.append("-" * 60)
+        for ing in ingredients:
+            fc = forecasts.get(ing.id)
+            days = f"{fc.days_remaining:.1f}" if fc and fc.daily_consumption > 0 else "N/A"
+            reorder = "YES" if fc and fc.needs_reorder else "no"
+            lines.append(f"{ing.name} | {ing.unit} | {ing.current_stock} | {days} | {reorder}")
+        blocks.append("=== Inventory & Forecast ===\n" + "\n".join(lines))
 
     if any(kw in msg_lower for kw in SALES_KEYWORDS):
         since = datetime.utcnow() - timedelta(days=7)

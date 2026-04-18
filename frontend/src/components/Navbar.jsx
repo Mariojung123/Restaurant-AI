@@ -5,6 +5,7 @@ const links = [
   { to: '/chat', label: 'Chat' },
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/invoice', label: 'Invoice' },
+  { to: '/receipt', label: 'Receipt' },
   { to: '/recipe', label: 'Recipe' },
   { to: '/settings', label: 'Settings' },
 ];

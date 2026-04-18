@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import ChatBubble from '../components/ChatBubble.jsx';
 
 // Chat page: collects user text, posts to /api/chat/message, renders thread.
 function Chat() {
+  const sessionId = useRef(crypto.randomUUID());
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -28,7 +29,7 @@ function Chat() {
       const response = await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ session_id: sessionId.current, messages: nextMessages }),
       });
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`);
