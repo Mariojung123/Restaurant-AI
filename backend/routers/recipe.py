@@ -1,15 +1,16 @@
 """
 Recipe endpoints.
 
-Skeleton CRUD for recipes and their ingredient mappings. Sales logging
-endpoints live here too so consumption data flows cleanly into the
-prediction service.
+CRUD for recipes and ingredient mappings. Two-step NL registration flow:
+  POST /preview — parse + fuzzy match, no DB writes
+  POST /confirm — save Recipe + RecipeIngredients
 """
 
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.database import (
@@ -20,14 +21,15 @@ from models.database import (
     get_db,
 )
 from services.claude import parse_recipe_ingredients
+from services.invoice import _create_ingredient, fuzzy_match_ingredient
 
 
 router = APIRouter()
 
 
-class RecipeIngredientIn(BaseModel):
-    """Ingredient-to-recipe mapping payload."""
+# ── existing models ───────────────────────────────────────────────────────────
 
+class RecipeIngredientIn(BaseModel):
     ingredient_id: int
     quantity: Optional[float] = None
     unit: str = "unit"
@@ -35,14 +37,10 @@ class RecipeIngredientIn(BaseModel):
 
 
 class ParseRequest(BaseModel):
-    """Natural language ingredient list to parse."""
-
     ingredient_text: str
 
 
 class ParsedIngredient(BaseModel):
-    """Single parsed ingredient returned before user confirmation."""
-
     name: str
     quantity: Optional[float]
     unit: str
@@ -51,8 +49,6 @@ class ParsedIngredient(BaseModel):
 
 
 class RecipeIn(BaseModel):
-    """Payload for creating a recipe."""
-
     name: str
     description: Optional[str] = None
     price: float = 0.0
@@ -60,8 +56,6 @@ class RecipeIn(BaseModel):
 
 
 class RecipeOut(BaseModel):
-    """Recipe representation returned by the API."""
-
     id: int
     name: str
     description: Optional[str]
@@ -72,16 +66,174 @@ class RecipeOut(BaseModel):
 
 
 class SalesLogIn(BaseModel):
-    """Payload for recording a sale."""
-
     recipe_id: int
     quantity: int = 1
     total_price: Optional[float] = None
 
 
+# ── preview / confirm models ──────────────────────────────────────────────────
+
+class RecipePreviewIn(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float = 0.0
+    ingredient_text: str
+
+
+class SuggestedMatch(BaseModel):
+    id: int
+    name: str
+    unit: str
+
+
+class PreviewItem(BaseModel):
+    name: str
+    quantity: Optional[float]
+    unit: str
+    quantity_display: str
+    reasoning: str
+    suggested_match: Optional[SuggestedMatch]
+    match_score: float
+
+
+class RecipePreviewOut(BaseModel):
+    name: str
+    description: Optional[str]
+    price: float
+    items: list[PreviewItem]
+
+
+class ConfirmItem(BaseModel):
+    name: str
+    quantity: Optional[float] = None
+    unit: str = "unit"
+    quantity_display: str = ""
+    ingredient_id: Optional[int] = None
+    include: bool = True
+
+
+class RecipeConfirmIn(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float = 0.0
+    items: list[ConfirmItem] = Field(default_factory=list)
+
+
+class RecipeConfirmOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    price: float
+    ingredients_linked: int
+    ingredients_created: int
+
+
+# ── endpoints ─────────────────────────────────────────────────────────────────
+
+@router.post("/preview", response_model=RecipePreviewOut)
+def preview_recipe(payload: RecipePreviewIn, db: Session = Depends(get_db)):
+    """Parse NL ingredients + fuzzy match against existing Ingredients. No DB writes."""
+    if not payload.ingredient_text.strip():
+        raise HTTPException(status_code=400, detail="ingredient_text is required")
+
+    try:
+        parsed = parse_recipe_ingredients(payload.ingredient_text)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=f"Claude parsing failed: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Claude API error: {e}")
+
+    items = []
+    for item in parsed:
+        match, score = fuzzy_match_ingredient(db, item["name"])
+        suggested = None
+        if match:
+            suggested = SuggestedMatch(id=match.id, name=match.name, unit=match.unit)
+        items.append(
+            PreviewItem(
+                name=item["name"],
+                quantity=item.get("quantity"),
+                unit=item.get("unit", "unit"),
+                quantity_display=item.get("quantity_display", ""),
+                reasoning=item.get("reasoning", ""),
+                suggested_match=suggested,
+                match_score=score,
+            )
+        )
+
+    return RecipePreviewOut(
+        name=payload.name,
+        description=payload.description,
+        price=payload.price,
+        items=items,
+    )
+
+
+@router.post("/confirm", response_model=RecipeConfirmOut, status_code=201)
+def confirm_recipe(payload: RecipeConfirmIn, db: Session = Depends(get_db)):
+    """Save Recipe + RecipeIngredients. Creates new Ingredients where ingredient_id is null."""
+    existing = (
+        db.query(Recipe)
+        .filter(func.lower(Recipe.name) == payload.name.lower().strip())
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Recipe '{payload.name}' already exists")
+
+    recipe = Recipe(
+        name=payload.name,
+        description=payload.description,
+        price=payload.price,
+    )
+    db.add(recipe)
+    db.flush()
+
+    linked = 0
+    created = 0
+
+    for item in payload.items:
+        if not item.include:
+            continue
+
+        if item.ingredient_id is not None:
+            ingredient = db.query(Ingredient).filter(Ingredient.id == item.ingredient_id).first()
+            if ingredient is None:
+                db.rollback()
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Ingredient not found: {item.ingredient_id}",
+                )
+            linked += 1
+        else:
+            ingredient = _create_ingredient(db, item.name, item.unit)
+            created += 1
+
+        db.add(
+            RecipeIngredient(
+                recipe_id=recipe.id,
+                ingredient_id=ingredient.id,
+                quantity=item.quantity,
+                unit=item.unit,
+                quantity_display=item.quantity_display or None,
+            )
+        )
+
+    db.commit()
+    db.refresh(recipe)
+
+    return RecipeConfirmOut(
+        id=recipe.id,
+        name=recipe.name,
+        description=recipe.description,
+        price=recipe.price,
+        ingredients_linked=linked,
+        ingredients_created=created,
+    )
+
+
 @router.post("/parse", response_model=list[ParsedIngredient])
 def parse_recipe(payload: ParseRequest) -> list[ParsedIngredient]:
-    """Parse a natural language ingredient list. Returns estimates + reasoning for user confirmation."""
+    """Parse a natural language ingredient list. Returns estimates + reasoning for confirmation."""
     try:
         items = parse_recipe_ingredients(payload.ingredient_text)
     except Exception as e:
@@ -91,7 +243,6 @@ def parse_recipe(payload: ParseRequest) -> list[ParsedIngredient]:
 
 @router.get("/", response_model=list[RecipeOut])
 def list_recipes(db: Session = Depends(get_db)) -> list[RecipeOut]:
-    """Return every recipe on the menu."""
     return db.query(Recipe).order_by(Recipe.name).all()
 
 
@@ -104,7 +255,7 @@ def create_recipe(payload: RecipeIn, db: Session = Depends(get_db)) -> RecipeOut
         price=payload.price,
     )
     db.add(recipe)
-    db.flush()  # get recipe.id before linking ingredients
+    db.flush()
 
     for link in payload.ingredients:
         ingredient = db.query(Ingredient).filter(Ingredient.id == link.ingredient_id).first()
@@ -131,7 +282,7 @@ def create_recipe(payload: RecipeIn, db: Session = Depends(get_db)) -> RecipeOut
 
 @router.post("/sales", status_code=201)
 def log_sale(payload: SalesLogIn, db: Session = Depends(get_db)) -> dict:
-    """Record a sale of a recipe. Downstream consumers use this for forecasting."""
+    """Record a sale of a recipe."""
     recipe = db.query(Recipe).filter(Recipe.id == payload.recipe_id).first()
     if recipe is None:
         raise HTTPException(status_code=404, detail="Recipe not found")

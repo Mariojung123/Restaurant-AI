@@ -154,7 +154,7 @@ def test_preview_strips_markdown_fences(client, db_session):
 
 def test_confirm_saves_sales_and_deducts_stock(client, db_session):
     recipe, ingredient = _make_recipe_with_ingredient(
-        db_session, "cnf-chicken-rice-99", "cnf-chicken-breast-99", qty=0.3
+        db_session, "rct-chicken-rice-99", "rct-chicken-breast-99", qty=0.3
     )
 
     payload = {
