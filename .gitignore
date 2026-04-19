@@ -25,6 +25,8 @@ frontend/dev-dist/
 
 # Claude Code internal files
 .claude/
+CLAUDE.md
+INITIAL.md
 
 # IDE / OS
 .vscode/
