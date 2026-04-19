@@ -1,30 +1,13 @@
-import difflib
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, Recipe, RecipeIngredient, SalesLog
+from services.fuzzy_match import fuzzy_match
 
 
 def fuzzy_match_recipe(db: Session, name: str) -> tuple:
-    """Return best-matching Recipe via SequenceMatcher. Threshold 0.7."""
-    recipes = db.query(Recipe).all()
-    if not recipes:
-        return (None, 0.0)
-
-    best_score = 0.0
-    best_match = None
-    for recipe in recipes:
-        score = difflib.SequenceMatcher(
-            None, name.lower().strip(), recipe.name.lower().strip()
-        ).ratio()
-        if score > best_score:
-            best_score = score
-            best_match = recipe
-
-    if best_score >= 0.7:
-        return (best_match, best_score)
-    return (None, 0.0)
+    return fuzzy_match(db.query(Recipe).all(), name)
 
 
 def process_receipt_items(

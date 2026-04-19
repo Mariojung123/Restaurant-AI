@@ -1,9 +1,10 @@
-import difflib
-
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient
+from services.fuzzy_match import FUZZY_MATCH_THRESHOLD, fuzzy_match
+
+__all__ = ["FUZZY_MATCH_THRESHOLD", "fuzzy_match_ingredient", "find_ingredient_by_name", "create_ingredient"]
 
 
 def find_ingredient_by_name(db: Session, name: str):
@@ -15,24 +16,7 @@ def find_ingredient_by_name(db: Session, name: str):
 
 
 def fuzzy_match_ingredient(db: Session, name: str) -> tuple:
-    """Return best-matching Ingredient via SequenceMatcher. Returns (None, 0.0) if below 0.7."""
-    ingredients = db.query(Ingredient).all()
-    if not ingredients:
-        return (None, 0.0)
-
-    best_score = 0.0
-    best_match = None
-    for ingredient in ingredients:
-        score = difflib.SequenceMatcher(
-            None, name.lower().strip(), ingredient.name.lower().strip()
-        ).ratio()
-        if score > best_score:
-            best_score = score
-            best_match = ingredient
-
-    if best_score >= 0.7:
-        return (best_match, best_score)
-    return (None, 0.0)
+    return fuzzy_match(db.query(Ingredient).all(), name)
 
 
 def create_ingredient(db: Session, name: str, unit: str) -> Ingredient:
