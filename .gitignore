@@ -23,6 +23,9 @@ pnpm-debug.log*
 # PWA generated
 frontend/dev-dist/
 
+# Claude Code internal files
+.claude/
+
 # IDE / OS
 .vscode/
 .idea/
