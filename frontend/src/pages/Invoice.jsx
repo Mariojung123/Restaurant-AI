@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { previewInvoice, confirmInvoice } from '../api/vision.js';
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+const STEP = { UPLOAD: 'upload', REVIEW: 'review', DONE: 'done' };
 
 function Invoice() {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(STEP.UPLOAD);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [items, setItems] = useState([]);
@@ -34,14 +35,7 @@ function Invoice() {
     setLoading(true);
     setError('');
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch(`${API}/api/vision/invoice/preview`, { method: 'POST', body: fd });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.detail ?? res.statusText);
-      }
-      const data = await res.json();
+      const data = await previewInvoice(file);
       setSupplier(data.supplier ?? '');
       setInvoiceDate(data.invoice_date ?? '');
       setDuplicateWarning(data.duplicate_warning);
@@ -53,7 +47,7 @@ function Invoice() {
           _useNew: !it.suggested_match || it.match_score < 0.7,
         }))
       );
-      setStep(2);
+      setStep(STEP.REVIEW);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -83,7 +77,7 @@ function Invoice() {
     setLoading(true);
     setError('');
     try {
-      const payload = {
+      const data = await confirmInvoice({
         supplier: supplier || null,
         invoice_date: invoiceDate || null,
         items: items.map((it) => ({
@@ -94,19 +88,9 @@ function Invoice() {
           ingredient_id: it.include && !it._useNew ? it.ingredient_id : null,
           include: it.include,
         })),
-      };
-      const res = await fetch(`${API}/api/vision/invoice/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.detail ?? res.statusText);
-      }
-      const data = await res.json();
       setResult(data);
-      setStep(3);
+      setStep(STEP.DONE);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -115,7 +99,7 @@ function Invoice() {
   }
 
   function reset() {
-    setStep(1);
+    setStep(STEP.UPLOAD);
     setFile(null);
     setPreview(null);
     setItems([]);
@@ -150,7 +134,7 @@ function Invoice() {
     return <span className="text-xs text-blue-600 font-medium">✨ New ingredient</span>;
   }
 
-  if (step === 1) {
+  if (step === STEP.UPLOAD) {
     return (
       <div className="flex flex-col gap-6">
         <h1 className="text-xl font-semibold">Invoice Scan</h1>
@@ -188,7 +172,7 @@ function Invoice() {
     );
   }
 
-  if (step === 2) {
+  if (step === STEP.REVIEW) {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold">Review & Edit</h1>
@@ -287,9 +271,7 @@ function Invoice() {
     );
   }
 
-  const skipped = result
-    ? items.length - result.items_processed
-    : 0;
+  const skipped = result ? items.length - result.items_processed : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -303,9 +285,7 @@ function Invoice() {
             <span
               className={[
                 'rounded px-2 py-0.5 text-xs font-medium',
-                it.action === 'matched'
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-blue-100 text-blue-700',
+                it.action === 'matched' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700',
               ].join(' ')}
             >
               {it.action === 'matched' ? 'Existing' : 'New'}

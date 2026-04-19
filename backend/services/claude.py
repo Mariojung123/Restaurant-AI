@@ -13,10 +13,8 @@ from typing import Optional
 from anthropic import Anthropic
 
 
-# Model id used across the service. Update here to roll forward to a new Claude version.
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
-# Default system prompt reflecting the product persona: friendly multilingual AI partner
 DEFAULT_SYSTEM_PROMPT = (
     "You are a friendly AI operations partner for a small restaurant owner. "
     "Always respond in the same language the user writes in. "
@@ -24,15 +22,28 @@ DEFAULT_SYSTEM_PROMPT = (
     "Help interpret sales, inventory, and ordering data, and proactively suggest next steps."
 )
 
+_client: Optional[Anthropic] = None
+
 
 def _get_client() -> Anthropic:
-    """Build an Anthropic client from the ANTHROPIC_API_KEY environment variable."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not set. Copy backend/.env.example to backend/.env."
-        )
-    return Anthropic(api_key=api_key)
+    global _client
+    if _client is None:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set. Copy backend/.env.example to backend/.env."
+            )
+        _client = Anthropic(api_key=api_key)
+    return _client
+
+
+def strip_fences(raw: str) -> str:
+    """Remove markdown code fences from a Claude response string."""
+    raw = raw.strip()
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    return raw.strip()
 
 
 def chat_with_claude(
@@ -40,17 +51,7 @@ def chat_with_claude(
     system_prompt: Optional[str] = None,
     max_tokens: int = 1024,
 ) -> str:
-    """
-    Send a multi-turn chat to Claude and return the assistant text reply.
-
-    Args:
-        messages: list of {"role": "user"|"assistant", "content": str} dicts
-        system_prompt: optional override for the default system prompt
-        max_tokens: generation cap for the reply
-
-    Returns:
-        Plain-text content of the assistant reply.
-    """
+    """Send a multi-turn chat to Claude and return the assistant text reply."""
     client = _get_client()
     response = client.messages.create(
         model=CLAUDE_MODEL,
@@ -58,14 +59,7 @@ def chat_with_claude(
         system=system_prompt or DEFAULT_SYSTEM_PROMPT,
         messages=messages,
     )
-
-    # Concatenate any text blocks returned by the API
-    parts: list[str] = []
-    for block in response.content:
-        text = getattr(block, "text", None)
-        if text:
-            parts.append(text)
-    return "".join(parts).strip()
+    return "".join(getattr(b, "text", "") for b in response.content).strip()
 
 
 _VAGUE_UNIT_REFERENCE = """
@@ -144,11 +138,7 @@ _RECIPE_PARSE_PROMPT = _RECIPE_PARSE_PROMPT.format(
 
 
 def parse_recipe_ingredients(ingredient_text: str) -> list[dict]:
-    """
-    Parse a natural language ingredient list into structured data with reasoning.
-
-    Returns a list of dicts with keys: name, quantity, unit, quantity_display, reasoning.
-    """
+    """Parse a natural language ingredient list into structured data with reasoning."""
     client = _get_client()
     response = client.messages.create(
         model=CLAUDE_MODEL,
@@ -161,19 +151,8 @@ def parse_recipe_ingredients(ingredient_text: str) -> list[dict]:
             }
         ],
     )
-
-    raw = "".join(
-        getattr(block, "text", "") for block in response.content
-    ).strip()
-
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    return json.loads(raw)
+    raw = "".join(getattr(b, "text", "") for b in response.content).strip()
+    return json.loads(strip_fences(raw))
 
 
 _RECIPE_CHAT_PARSE_SYSTEM = (
@@ -207,18 +186,18 @@ def extract_recipe_from_chat(message: str) -> dict:
             {"role": "user", "content": _RECIPE_CHAT_PARSE_PROMPT.format(message=message)}
         ],
     )
-
     raw = "".join(getattr(b, "text", "") for b in response.content).strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    data = json.loads(raw)
+    data = json.loads(strip_fences(raw))
     if "name" not in data or "items" not in data:
         raise ValueError("Claude response missing required fields")
     return data
+
+
+_VISION_EXTRACTION_SYSTEM = (
+    "You are a data extraction assistant. "
+    "Extract structured data from images exactly as instructed. "
+    "Return only valid JSON with no extra text or explanation."
+)
 
 
 def parse_image_with_claude(
@@ -227,23 +206,12 @@ def parse_image_with_claude(
     media_type: str = "image/jpeg",
     max_tokens: int = 1024,
 ) -> str:
-    """
-    Ask Claude Vision to extract structured info from an image.
-
-    Args:
-        image_base64: the image encoded as a base64 string (no data: prefix)
-        prompt: instruction describing what to extract (e.g. invoice fields)
-        media_type: MIME type of the supplied image
-        max_tokens: generation cap for the reply
-
-    Returns:
-        Plain-text content of the assistant reply.
-    """
+    """Ask Claude Vision to extract structured info from an image."""
     client = _get_client()
     response = client.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=max_tokens,
-        system=DEFAULT_SYSTEM_PROMPT,
+        system=_VISION_EXTRACTION_SYSTEM,
         messages=[
             {
                 "role": "user",
@@ -261,10 +229,4 @@ def parse_image_with_claude(
             }
         ],
     )
-
-    parts: list[str] = []
-    for block in response.content:
-        text = getattr(block, "text", None)
-        if text:
-            parts.append(text)
-    return "".join(parts).strip()
+    return "".join(getattr(b, "text", "") for b in response.content).strip()

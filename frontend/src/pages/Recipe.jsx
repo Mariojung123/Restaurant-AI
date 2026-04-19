@@ -1,32 +1,28 @@
 import { useEffect, useState } from 'react';
+import { listRecipes, previewRecipe, confirmRecipe } from '../api/recipe.js';
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
-
+const STEP = { LIST: 'list', INPUT: 'input', REVIEW: 'review', DONE: 'done' };
 const EMPTY_FORM = { name: '', price: '', description: '', ingredientText: '' };
 
 function Recipe() {
-  const [step, setStep] = useState(0); // 0=list, 1=input, 2=review, 3=done
+  const [step, setStep] = useState(STEP.LIST);
   const [recipes, setRecipes] = useState([]);
   const [listStatus, setListStatus] = useState('loading');
   const [listError, setListError] = useState(null);
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [items, setItems] = useState([]);
-  const [previewMeta, setPreviewMeta] = useState(null); // {name, description, price}
+  const [previewMeta, setPreviewMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
 
   useEffect(() => {
-    if (step !== 0) return;
+    if (step !== STEP.LIST) return;
     let cancelled = false;
     setListStatus('loading');
 
-    fetch(`${API}/api/recipe/`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Status ${r.status}`);
-        return r.json();
-      })
+    listRecipes()
       .then((data) => { if (!cancelled) { setRecipes(data); setListStatus('ready'); } })
       .catch((e) => { if (!cancelled) { setListError(e.message); setListStatus('error'); } });
 
@@ -60,21 +56,12 @@ function Recipe() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API}/api/recipe/preview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name,
-          description: form.description || null,
-          price: parseFloat(form.price) || 0,
-          ingredient_text: form.ingredientText,
-        }),
+      const data = await previewRecipe({
+        name: form.name,
+        description: form.description || null,
+        price: parseFloat(form.price) || 0,
+        ingredient_text: form.ingredientText,
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.detail ?? res.statusText);
-      }
-      const data = await res.json();
       setPreviewMeta({ name: data.name, description: data.description, price: data.price });
       setItems(
         data.items.map((it) => ({
@@ -84,7 +71,7 @@ function Recipe() {
           _useNew: !it.suggested_match || it.match_score < 0.7,
         }))
       );
-      setStep(2);
+      setStep(STEP.REVIEW);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -96,7 +83,7 @@ function Recipe() {
     setLoading(true);
     setError('');
     try {
-      const payload = {
+      const data = await confirmRecipe({
         name: previewMeta.name,
         description: previewMeta.description,
         price: previewMeta.price,
@@ -108,19 +95,9 @@ function Recipe() {
           ingredient_id: it.include && !it._useNew ? it.ingredient_id : null,
           include: it.include,
         })),
-      };
-      const res = await fetch(`${API}/api/recipe/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.detail ?? res.statusText);
-      }
-      const data = await res.json();
       setResult(data);
-      setStep(3);
+      setStep(STEP.DONE);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -134,7 +111,7 @@ function Recipe() {
     setPreviewMeta(null);
     setResult(null);
     setError('');
-    setStep(1);
+    setStep(STEP.INPUT);
   }
 
   function matchBadge(item, idx) {
@@ -161,8 +138,8 @@ function Recipe() {
     return <span className="text-xs text-blue-600 font-medium">✨ New ingredient</span>;
   }
 
-  // ── Step 0: list ─────────────────────────────────────────────────────────────
-  if (step === 0) {
+  // ── Step LIST ─────────────────────────────────────────────────────────────────
+  if (step === STEP.LIST) {
     return (
       <section className="space-y-4">
         <header className="flex items-center justify-between">
@@ -171,7 +148,7 @@ function Recipe() {
             <p className="text-sm text-slate-500">Menu items and their ingredients.</p>
           </div>
           <button
-            onClick={() => { setError(''); setStep(1); }}
+            onClick={() => { setError(''); setStep(STEP.INPUT); }}
             className="bg-brand text-white px-3 py-1.5 rounded-lg text-sm font-medium"
           >
             + Add Recipe
@@ -206,13 +183,13 @@ function Recipe() {
     );
   }
 
-  // ── Step 1: input form ───────────────────────────────────────────────────────
-  if (step === 1) {
+  // ── Step INPUT ───────────────────────────────────────────────────────────────
+  if (step === STEP.INPUT) {
     const canAnalyze = form.name.trim() && form.ingredientText.trim();
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
-          <button onClick={() => setStep(0)} className="text-slate-500 text-sm hover:text-slate-700">
+          <button onClick={() => setStep(STEP.LIST)} className="text-slate-500 text-sm hover:text-slate-700">
             ← Back
           </button>
           <h1 className="text-xl font-semibold">New Recipe</h1>
@@ -275,12 +252,12 @@ function Recipe() {
     );
   }
 
-  // ── Step 2: review table ─────────────────────────────────────────────────────
-  if (step === 2) {
+  // ── Step REVIEW ──────────────────────────────────────────────────────────────
+  if (step === STEP.REVIEW) {
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
-          <button onClick={() => setStep(1)} className="text-slate-500 text-sm hover:text-slate-700">
+          <button onClick={() => setStep(STEP.INPUT)} className="text-slate-500 text-sm hover:text-slate-700">
             ← Back
           </button>
           <h1 className="text-xl font-semibold">Review Ingredients</h1>
@@ -361,7 +338,7 @@ function Recipe() {
     );
   }
 
-  // ── Step 3: done ─────────────────────────────────────────────────────────────
+  // ── Step DONE ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">Done</h1>
@@ -377,7 +354,7 @@ function Recipe() {
       </div>
       <div className="flex gap-3">
         <button
-          onClick={() => setStep(0)}
+          onClick={() => setStep(STEP.LIST)}
           className="flex-1 border border-brand text-brand px-4 py-2 rounded-lg font-medium"
         >
           Back to List

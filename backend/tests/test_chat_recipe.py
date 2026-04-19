@@ -206,7 +206,7 @@ def test_chat_recipe_duplicate_name_returns_warning(client, db_session):
     })
 
     assert resp.status_code == 200
-    assert "이미 존재" in resp.json()["reply"]
+    assert "cr-Dup Recipe-99" in resp.json()["reply"]
 
 
 def test_chat_recipe_history_excludes_pending(client, db_session):

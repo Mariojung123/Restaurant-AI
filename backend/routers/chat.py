@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -9,8 +10,11 @@ from sqlalchemy.orm import Session
 
 from models.database import ChatHistory, Ingredient, Recipe, RecipeIngredient, SalesLog, get_db
 from services.claude import DEFAULT_SYSTEM_PROMPT, chat_with_claude, extract_recipe_from_chat
-from services.invoice import _create_ingredient, fuzzy_match_ingredient
+from services.ingredient import fuzzy_match_ingredient, create_ingredient
 from services.prediction import forecast_all
+from services.recipe_svc import save_recipe_core
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -172,45 +176,19 @@ def _format_confirmation_message(parsed: dict) -> str:
     return "\n".join(lines)
 
 
-def _save_confirmed_recipe(db: Session, pending: dict) -> dict:
-    existing = (
-        db.query(Recipe)
-        .filter(func.lower(Recipe.name) == pending["name"].lower().strip())
-        .first()
-    )
-    if existing:
-        raise ValueError(f"'{pending['name']}' 레시피가 이미 존재합니다.")
-
-    recipe = Recipe(
-        name=pending["name"],
-        description=pending.get("description"),
-        price=pending.get("price", 0.0),
-    )
-    db.add(recipe)
-    db.flush()
-
-    linked = 0
-    created = 0
+def _resolve_pending_items(db: Session, pending: dict) -> list[dict]:
+    resolved = []
     for item in pending["items"]:
         match, score = fuzzy_match_ingredient(db, item["name"])
-        if match and score >= 0.7:
-            ingredient = match
-            linked += 1
-        else:
-            ingredient = _create_ingredient(db, item["name"], item.get("unit", "unit"))
-            created += 1
-
-        db.add(
-            RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ingredient.id,
-                quantity=item.get("quantity"),
-                unit=item.get("unit", "unit"),
-                quantity_display=item.get("quantity_display"),
-            )
-        )
-
-    return {"id": recipe.id, "name": recipe.name, "ingredients_linked": linked, "ingredients_created": created}
+        ingredient = match if (match and score >= 0.7) else None
+        resolved.append({
+            "ingredient": ingredient,
+            "name": item["name"],
+            "quantity": item.get("quantity"),
+            "unit": item.get("unit", "unit"),
+            "quantity_display": item.get("quantity_display"),
+        })
+    return resolved
 
 
 def _append_history(db: Session, session_id: str, messages: list[ChatMessage], reply: str) -> None:
@@ -234,7 +212,14 @@ def send_message(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRes
     if pending:
         if _is_confirmation(last_user_msg):
             try:
-                result = _save_confirmed_recipe(db, pending)
+                resolved = _resolve_pending_items(db, pending)
+                result = save_recipe_core(
+                    db,
+                    name=pending["name"],
+                    description=pending.get("description"),
+                    price=pending.get("price", 0.0),
+                    resolved_items=resolved,
+                )
                 reply = (
                     f"✅ **{result['name']}** 레시피 등록 완료!\n"
                     f"재료 {result['ingredients_linked']}개 기존 재고와 연결, "
@@ -263,8 +248,8 @@ def send_message(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRes
             _append_history(db, payload.session_id, payload.messages, reply)
             db.commit()
             return ChatResponse(reply=reply, session_id=payload.session_id)
-        except Exception:
-            pass  # fall through to normal Claude chat
+        except Exception as e:
+            logger.warning("Recipe extraction failed, falling through to chat: %s", e)
 
     # ── normal Claude chat ────────────────────────────────────────────────────
     history = _load_history(db, payload.session_id)

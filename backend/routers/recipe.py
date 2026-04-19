@@ -10,7 +10,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.database import (
@@ -21,13 +20,14 @@ from models.database import (
     get_db,
 )
 from services.claude import parse_recipe_ingredients
-from services.invoice import _create_ingredient, fuzzy_match_ingredient
+from services.ingredient import create_ingredient, fuzzy_match_ingredient
+from services.recipe_svc import save_recipe_core
 
 
 router = APIRouter()
 
 
-# ── existing models ───────────────────────────────────────────────────────────
+# ── models ────────────────────────────────────────────────────────────────────
 
 class RecipeIngredientIn(BaseModel):
     ingredient_id: int
@@ -70,8 +70,6 @@ class SalesLogIn(BaseModel):
     quantity: int = 1
     total_price: Optional[float] = None
 
-
-# ── preview / confirm models ──────────────────────────────────────────────────
 
 class RecipePreviewIn(BaseModel):
     name: str
@@ -172,62 +170,47 @@ def preview_recipe(payload: RecipePreviewIn, db: Session = Depends(get_db)):
 @router.post("/confirm", response_model=RecipeConfirmOut, status_code=201)
 def confirm_recipe(payload: RecipeConfirmIn, db: Session = Depends(get_db)):
     """Save Recipe + RecipeIngredients. Creates new Ingredients where ingredient_id is null."""
-    existing = (
-        db.query(Recipe)
-        .filter(func.lower(Recipe.name) == payload.name.lower().strip())
-        .first()
-    )
-    if existing:
-        raise HTTPException(status_code=409, detail=f"Recipe '{payload.name}' already exists")
-
-    recipe = Recipe(
-        name=payload.name,
-        description=payload.description,
-        price=payload.price,
-    )
-    db.add(recipe)
-    db.flush()
-
-    linked = 0
-    created = 0
-
+    resolved = []
     for item in payload.items:
         if not item.include:
             continue
-
+        ingredient = None
         if item.ingredient_id is not None:
             ingredient = db.query(Ingredient).filter(Ingredient.id == item.ingredient_id).first()
             if ingredient is None:
-                db.rollback()
                 raise HTTPException(
                     status_code=404,
                     detail=f"Ingredient not found: {item.ingredient_id}",
                 )
-            linked += 1
-        else:
-            ingredient = _create_ingredient(db, item.name, item.unit)
-            created += 1
+        resolved.append({
+            "ingredient": ingredient,
+            "name": item.name,
+            "quantity": item.quantity,
+            "unit": item.unit,
+            "quantity_display": item.quantity_display or None,
+        })
 
-        db.add(
-            RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ingredient.id,
-                quantity=item.quantity,
-                unit=item.unit,
-                quantity_display=item.quantity_display or None,
-            )
+    try:
+        result = save_recipe_core(
+            db,
+            name=payload.name,
+            description=payload.description,
+            price=payload.price,
+            resolved_items=resolved,
         )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
     db.commit()
-    db.refresh(recipe)
+    recipe = db.query(Recipe).filter(Recipe.id == result["id"]).first()
 
     return RecipeConfirmOut(
         id=recipe.id,
         name=recipe.name,
         description=recipe.description,
         price=recipe.price,
-        ingredients_linked=linked,
-        ingredients_created=created,
+        ingredients_linked=result["ingredients_linked"],
+        ingredients_created=result["ingredients_created"],
     )
 
 
