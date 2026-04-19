@@ -31,7 +31,7 @@ def test_invoice_matches_existing_ingredient(client, db_session):
         [{"name": "chicken breast", "quantity": 10.0, "unit": "kg",
           "unit_price": 8.5, "total_price": 85.0}]
     )
-    with patch("routers.invoice.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_invoice(client)
 
     assert resp.status_code == 200
@@ -54,7 +54,7 @@ def test_invoice_creates_new_ingredient(client, db_session):
         supplier=None,
         date=None,
     )
-    with patch("routers.invoice.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_invoice(client)
 
     assert resp.status_code == 200
@@ -74,7 +74,7 @@ def test_invoice_case_insensitive_match(client, db_session):
         [{"name": "olive oil", "quantity": 1.0, "unit": "L",
           "unit_price": None, "total_price": None}]
     )
-    with patch("routers.invoice.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_invoice(client)
 
     assert resp.status_code == 200
@@ -87,7 +87,7 @@ def test_invoice_case_insensitive_match(client, db_session):
 
 
 def test_invoice_malformed_json_returns_422(client):
-    with patch("routers.invoice.parse_image_with_claude", return_value="not json"):
+    with patch("services.vision_common.parse_image_with_claude", return_value="not json"):
         resp = _post_invoice(client)
     assert resp.status_code == 422
     assert "non-JSON" in resp.json()["detail"]
@@ -95,7 +95,7 @@ def test_invoice_malformed_json_returns_422(client):
 
 def test_invoice_empty_items_returns_200(client):
     mock_resp = json.dumps({"supplier_name": "Unknown", "invoice_date": None, "items": []})
-    with patch("routers.invoice.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_invoice(client)
     assert resp.status_code == 200
     body = resp.json()
@@ -121,7 +121,7 @@ def test_invoice_strips_markdown_fences(client, db_session):
                    "unit_price": 3.0, "total_price": 15.0}],
     })
     raw_with_fences = f"```json\n{inner}\n```"
-    with patch("routers.invoice.parse_image_with_claude", return_value=raw_with_fences):
+    with patch("services.vision_common.parse_image_with_claude", return_value=raw_with_fences):
         resp = _post_invoice(client)
     assert resp.status_code == 200
     assert resp.json()["supplier"] == "Fence Co"
@@ -166,7 +166,7 @@ def test_preview_returns_fuzzy_match(client, db_session):
           "unit_price": None, "total_price": None}],
         supplier="PvwSupplierUnique99",
     )
-    with patch("routers.invoice.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_preview(client)
 
     assert resp.status_code == 200
@@ -187,7 +187,7 @@ def test_preview_no_match_below_threshold(client, db_session):
           "unit_price": None, "total_price": None}],
         supplier="PvwNoMatchSupplier99",
     )
-    with patch("routers.invoice.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_preview(client)
 
     assert resp.status_code == 200
@@ -205,7 +205,7 @@ def test_preview_no_db_writes(client, db_session):
           "unit_price": 3.0, "total_price": 15.0}],
         supplier="PvwNoWriteSupplier99",
     )
-    with patch("routers.invoice.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         _post_preview(client)
 
     assert db_session.query(Ingredient).count() == count_before

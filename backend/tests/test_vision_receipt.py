@@ -52,7 +52,7 @@ def test_preview_returns_fuzzy_match(client, db_session):
         [{"name": "rcp-grilled-chicken-99", "quantity": 3,
           "unit_price": 18.0, "total_price": 54.0}]
     )
-    with patch("routers.receipt.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_preview(client)
 
     assert resp.status_code == 200
@@ -72,7 +72,7 @@ def test_preview_no_match_below_threshold(client, db_session):
         [{"name": "xyzxyzxyz888abc", "quantity": 1,
           "unit_price": None, "total_price": None}]
     )
-    with patch("routers.receipt.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_preview(client)
 
     assert resp.status_code == 200
@@ -88,7 +88,7 @@ def test_preview_no_db_writes(client, db_session):
         [{"name": "rcp-no-write-item-99", "quantity": 2,
           "unit_price": 10.0, "total_price": 20.0}]
     )
-    with patch("routers.receipt.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         _post_preview(client)
 
     assert db_session.query(SalesLog).count() == sales_before
@@ -113,7 +113,7 @@ def test_preview_duplicate_warning(client, db_session):
           "unit_price": 12.0, "total_price": 12.0}],
         sale_date="2024-05-10",
     )
-    with patch("routers.receipt.parse_image_with_claude", return_value=mock_resp):
+    with patch("services.vision_common.parse_image_with_claude", return_value=mock_resp):
         resp = _post_preview(client)
 
     assert resp.status_code == 200
@@ -131,7 +131,7 @@ def test_preview_rejects_empty_file(client):
 
 
 def test_preview_malformed_json_returns_422(client):
-    with patch("routers.receipt.parse_image_with_claude", return_value="not json"):
+    with patch("services.vision_common.parse_image_with_claude", return_value="not json"):
         resp = _post_preview(client)
     assert resp.status_code == 422
     assert "non-JSON" in resp.json()["detail"]
@@ -144,7 +144,7 @@ def test_preview_strips_markdown_fences(client, db_session):
                    "unit_price": 30.0, "total_price": 60.0}],
     })
     raw_with_fences = f"```json\n{inner}\n```"
-    with patch("routers.receipt.parse_image_with_claude", return_value=raw_with_fences):
+    with patch("services.vision_common.parse_image_with_claude", return_value=raw_with_fences):
         resp = _post_preview(client)
     assert resp.status_code == 200
     assert resp.json()["sale_date"] == "2024-05-10"

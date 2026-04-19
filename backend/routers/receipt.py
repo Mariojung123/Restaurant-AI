@@ -1,7 +1,6 @@
 """Receipt vision endpoints — preview and confirm sales receipt images."""
 
-import base64
-import json
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -9,13 +8,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
 from models.database import SalesLog, get_db
-from services.claude import parse_image_with_claude, strip_fences
 from services.receipt import fuzzy_match_recipe, process_receipt_items
+from services.vision_common import call_vision_api, parse_vision_json, read_upload_file
 
 router = APIRouter()
-
-_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 _RECEIPT_EXTRACTION_PROMPT = (
     "You are a data extraction assistant for a restaurant POS system. "
@@ -91,20 +90,6 @@ class ConfirmResponse(BaseModel):
     items: list[ResultItem]
 
 
-def _parse_receipt_json(raw: str) -> ReceiptParseResult:
-    cleaned = strip_fences(raw)
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Claude returned non-JSON: {exc}") from exc
-    try:
-        return ReceiptParseResult(
-            sale_date=data.get("sale_date"),
-            items=[ReceiptLineItem(**i) for i in data.get("items", [])],
-        )
-    except Exception as exc:
-        raise ValueError(f"Invalid receipt structure: {exc}") from exc
-
 
 @router.post("/preview", response_model=PreviewResponse)
 async def preview_receipt(
@@ -112,25 +97,10 @@ async def preview_receipt(
     db: Session = Depends(get_db),
 ) -> PreviewResponse:
     """Parse receipt image, return items with fuzzy recipe match suggestions. No DB writes."""
-    if file.content_type not in _ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported image type: {file.content_type}")
-
-    raw_bytes = await file.read()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
+    raw_bytes = await read_upload_file(file)
+    raw_text = call_vision_api(raw_bytes, file.content_type, _RECEIPT_EXTRACTION_PROMPT)
     try:
-        raw_text = parse_image_with_claude(
-            image_base64=base64.b64encode(raw_bytes).decode("ascii"),
-            prompt=_RECEIPT_EXTRACTION_PROMPT,
-            media_type=file.content_type,
-            max_tokens=2048,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    try:
-        parsed = _parse_receipt_json(raw_text)
+        parsed = parse_vision_json(raw_text, ReceiptParseResult, "receipt")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -148,7 +118,7 @@ async def preview_receipt(
                 is not None
             )
         except ValueError:
-            pass
+            logger.warning("Invalid sale_date format '%s', skipping duplicate check", parsed.sale_date)
 
     preview_items = []
     for item in parsed.items:

@@ -21,7 +21,7 @@ Restaurant owners spend significant time on manual inventory tracking, recipe ma
 | Feature | Description |
 |---------|-------------|
 | **Natural Language Chat** | Ask about sales, stock levels, and ordering in plain English or Korean. Claude answers using live restaurant data injected into context. |
-| **Recipe Registration** | Describe a recipe in natural language ("마늘 한 큰술, 닭가슴살 200g..."). Claude estimates quantities from vague units (한 줌, a drizzle of, etc.) and shows a confirmation table before saving. Also works through the Chat interface. |
+| **Recipe Registration** | Describe a recipe in natural language ("1 tbsp garlic, 200g chicken breast..."). Claude estimates quantities from vague units (a handful, a drizzle of, etc.) and shows a confirmation table before saving. Also works through the Chat interface. |
 | **Invoice Vision Parsing** | Upload a delivery invoice photo → Claude Vision extracts line items → fuzzy-matched against existing inventory → review & confirm flow updates stock automatically. |
 | **Receipt Vision Parsing** | Upload a closing sales receipt → Claude Vision extracts menu items sold → fuzzy-matched against recipes → confirm to record sales and deduct ingredient stock. |
 | **Inventory Depletion Forecast** | Linear projection of days remaining per ingredient based on sales history. Dashboard shows ingredients that need reorder. |
@@ -30,7 +30,7 @@ Restaurant owners spend significant time on manual inventory tracking, recipe ma
 
 - **Two-step confirm flow** for both invoice and receipt: Claude parses first, user reviews and edits, then DB write happens. No accidental data corruption.
 - **Fuzzy ingredient matching** (SequenceMatcher, threshold 0.7) links scanned items to existing inventory without exact name matches.
-- **Vague unit conversion**: Claude converts "한 줌", "a pinch of", "두부 반 모" into gram/ml values with reasoning shown to the user.
+- **Vague unit conversion**: Claude converts "a handful", "a pinch of", "half a block of tofu" into gram/ml values with reasoning shown to the user.
 - **Multi-turn chat context**: Conversation history injected per session. Live inventory and sales data injected into system prompt based on keyword detection.
 
 ---
@@ -136,7 +136,7 @@ pytest tests/ -q
 ## Roadmap
 
 ### Next Up
-- [ ] Dashboard prediction cards — "닭가슴살 내일 저녁 다 써요" style depletion alerts surfaced in UI
+- [ ] Dashboard prediction cards — "Chicken breast runs out tomorrow evening" style depletion alerts surfaced in UI
 - [ ] Reorder suggestions — auto-generate order list based on forecast + historical purchase quantities
 
 ### Planned

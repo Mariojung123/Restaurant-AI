@@ -1,60 +1,109 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { listRecipes, previewRecipe, confirmRecipe } from '../api/recipe.js';
 
 const STEP = { LIST: 'list', INPUT: 'input', REVIEW: 'review', DONE: 'done' };
 const EMPTY_FORM = { name: '', price: '', description: '', ingredientText: '' };
 
-function Recipe() {
-  const [step, setStep] = useState(STEP.LIST);
-  const [recipes, setRecipes] = useState([]);
-  const [listStatus, setListStatus] = useState('loading');
-  const [listError, setListError] = useState(null);
+const initialState = {
+  step: STEP.LIST,
+  // list view
+  recipes: [],
+  listStatus: 'loading',
+  listError: null,
+  // registration flow
+  form: EMPTY_FORM,
+  items: [],
+  previewMeta: null,
+  loading: false,
+  error: '',
+  result: null,
+};
 
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [items, setItems] = useState([]);
-  const [previewMeta, setPreviewMeta] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [result, setResult] = useState(null);
+function reducer(state, action) {
+  switch (action.type) {
+    case 'LIST_LOADING':
+      return { ...state, listStatus: 'loading' };
+    case 'LIST_SUCCESS':
+      return { ...state, listStatus: 'ready', recipes: action.recipes };
+    case 'LIST_ERROR':
+      return { ...state, listStatus: 'error', listError: action.error };
+    case 'GO_TO_INPUT':
+      return { ...state, step: STEP.INPUT, error: '' };
+    case 'GO_TO_LIST':
+      return { ...state, step: STEP.LIST };
+    case 'GO_TO_INPUT_FROM_REVIEW':
+      return { ...state, step: STEP.INPUT };
+    case 'FORM_UPDATE':
+      return { ...state, form: { ...state.form, [action.field]: action.value } };
+    case 'ANALYZE_START':
+      return { ...state, loading: true, error: '' };
+    case 'ANALYZE_SUCCESS':
+      return {
+        ...state,
+        loading: false,
+        step: STEP.REVIEW,
+        previewMeta: { name: action.name, description: action.description, price: action.price },
+        items: action.items,
+      };
+    case 'SAVE_START':
+      return { ...state, loading: true, error: '' };
+    case 'SAVE_SUCCESS':
+      return { ...state, loading: false, step: STEP.DONE, result: action.result };
+    case 'REQUEST_ERROR':
+      return { ...state, loading: false, error: action.error };
+    case 'UPDATE_ITEM':
+      return {
+        ...state,
+        items: state.items.map((it, i) =>
+          i === action.idx ? { ...it, [action.field]: action.value } : it
+        ),
+      };
+    case 'SET_MATCH':
+      return {
+        ...state,
+        items: state.items.map((it, i) => {
+          if (i !== action.idx) return it;
+          return action.value === '__new__'
+            ? { ...it, ingredient_id: null, _useNew: true }
+            : { ...it, ingredient_id: parseInt(action.value, 10), _useNew: false };
+        }),
+      };
+    case 'RESET_FLOW':
+      return {
+        ...state,
+        step: STEP.INPUT,
+        form: EMPTY_FORM,
+        items: [],
+        previewMeta: null,
+        result: null,
+        error: '',
+      };
+    default:
+      return state;
+  }
+}
+
+function Recipe() {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const {
+    step, recipes, listStatus, listError,
+    form, items, previewMeta, loading, error, result,
+  } = state;
 
   useEffect(() => {
     if (step !== STEP.LIST) return;
     let cancelled = false;
-    setListStatus('loading');
+    dispatch({ type: 'LIST_LOADING' });
 
     listRecipes()
-      .then((data) => { if (!cancelled) { setRecipes(data); setListStatus('ready'); } })
-      .catch((e) => { if (!cancelled) { setListError(e.message); setListStatus('error'); } });
+      .then((data) => { if (!cancelled) dispatch({ type: 'LIST_SUCCESS', recipes: data }); })
+      .catch((e) => { if (!cancelled) dispatch({ type: 'LIST_ERROR', error: e.message }); });
 
     return () => { cancelled = true; };
   }, [step]);
 
-  function updateForm(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  }
-
-  function updateItem(idx, field, value) {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
-  }
-
-  function handleMatchSelect(idx, value) {
-    if (value === '__new__') {
-      setItems((prev) =>
-        prev.map((it, i) => (i === idx ? { ...it, ingredient_id: null, _useNew: true } : it))
-      );
-    } else {
-      const id = parseInt(value, 10);
-      setItems((prev) =>
-        prev.map((it, i) =>
-          i === idx ? { ...it, ingredient_id: id, _useNew: false } : it
-        )
-      );
-    }
-  }
-
   async function handleAnalyze() {
-    setLoading(true);
-    setError('');
+    dispatch({ type: 'ANALYZE_START' });
     try {
       const data = await previewRecipe({
         name: form.name,
@@ -62,26 +111,25 @@ function Recipe() {
         price: parseFloat(form.price) || 0,
         ingredient_text: form.ingredientText,
       });
-      setPreviewMeta({ name: data.name, description: data.description, price: data.price });
-      setItems(
-        data.items.map((it) => ({
+      dispatch({
+        type: 'ANALYZE_SUCCESS',
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        items: data.items.map((it) => ({
           ...it,
           include: true,
           ingredient_id: it.suggested_match?.id ?? null,
           _useNew: !it.suggested_match || it.match_score < 0.7,
-        }))
-      );
-      setStep(STEP.REVIEW);
+        })),
+      });
     } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
+      dispatch({ type: 'REQUEST_ERROR', error: e.message });
     }
   }
 
   async function handleSave() {
-    setLoading(true);
-    setError('');
+    dispatch({ type: 'SAVE_START' });
     try {
       const data = await confirmRecipe({
         name: previewMeta.name,
@@ -96,22 +144,10 @@ function Recipe() {
           include: it.include,
         })),
       });
-      setResult(data);
-      setStep(STEP.DONE);
+      dispatch({ type: 'SAVE_SUCCESS', result: data });
     } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
+      dispatch({ type: 'REQUEST_ERROR', error: e.message });
     }
-  }
-
-  function reset() {
-    setForm(EMPTY_FORM);
-    setItems([]);
-    setPreviewMeta(null);
-    setResult(null);
-    setError('');
-    setStep(STEP.INPUT);
   }
 
   function matchBadge(item, idx) {
@@ -124,7 +160,7 @@ function Recipe() {
         <select
           className="text-xs border rounded px-1 py-0.5 text-yellow-700 bg-yellow-50"
           value={item._useNew ? '__new__' : String(item.ingredient_id ?? '__new__')}
-          onChange={(e) => handleMatchSelect(idx, e.target.value)}
+          onChange={(e) => dispatch({ type: 'SET_MATCH', idx, value: e.target.value })}
         >
           {item.suggested_match && (
             <option value={String(item.suggested_match.id)}>
@@ -148,7 +184,7 @@ function Recipe() {
             <p className="text-sm text-slate-500">Menu items and their ingredients.</p>
           </div>
           <button
-            onClick={() => { setError(''); setStep(STEP.INPUT); }}
+            onClick={() => dispatch({ type: 'GO_TO_INPUT' })}
             className="bg-brand text-white px-3 py-1.5 rounded-lg text-sm font-medium"
           >
             + Add Recipe
@@ -189,7 +225,7 @@ function Recipe() {
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
-          <button onClick={() => setStep(STEP.LIST)} className="text-slate-500 text-sm hover:text-slate-700">
+          <button onClick={() => dispatch({ type: 'GO_TO_LIST' })} className="text-slate-500 text-sm hover:text-slate-700">
             ← Back
           </button>
           <h1 className="text-xl font-semibold">New Recipe</h1>
@@ -201,7 +237,7 @@ function Recipe() {
             <input
               className="border rounded px-2 py-1.5 text-sm"
               value={form.name}
-              onChange={(e) => updateForm('name', e.target.value)}
+              onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'name', value: e.target.value })}
               placeholder="e.g. Salmon with Cream Sauce"
             />
           </div>
@@ -213,7 +249,7 @@ function Recipe() {
               min="0"
               step="0.01"
               value={form.price}
-              onChange={(e) => updateForm('price', e.target.value)}
+              onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'price', value: e.target.value })}
               placeholder="0.00"
             />
           </div>
@@ -224,7 +260,7 @@ function Recipe() {
           <input
             className="border rounded px-2 py-1.5 text-sm"
             value={form.description}
-            onChange={(e) => updateForm('description', e.target.value)}
+            onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'description', value: e.target.value })}
             placeholder="e.g. Pan-seared salmon in garlic cream sauce"
           />
         </div>
@@ -234,7 +270,7 @@ function Recipe() {
           <textarea
             className="border rounded px-2 py-1.5 text-sm min-h-[100px]"
             value={form.ingredientText}
-            onChange={(e) => updateForm('ingredientText', e.target.value)}
+            onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'ingredientText', value: e.target.value })}
             placeholder="salmon fillet 200g, butter 1 tablespoon, heavy cream 100ml, garlic 2 cloves"
           />
         </div>
@@ -257,7 +293,7 @@ function Recipe() {
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
-          <button onClick={() => setStep(STEP.INPUT)} className="text-slate-500 text-sm hover:text-slate-700">
+          <button onClick={() => dispatch({ type: 'GO_TO_INPUT_FROM_REVIEW' })} className="text-slate-500 text-sm hover:text-slate-700">
             ← Back
           </button>
           <h1 className="text-xl font-semibold">Review Ingredients</h1>
@@ -296,7 +332,7 @@ function Recipe() {
                     <input
                       type="checkbox"
                       checked={item.include}
-                      onChange={(e) => updateItem(idx, 'include', e.target.checked)}
+                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'include', value: e.target.checked })}
                     />
                   </td>
                   <td className="py-1.5 pr-2 text-xs text-slate-700">{item.name}</td>
@@ -304,14 +340,14 @@ function Recipe() {
                     <input
                       className="border rounded px-1 py-0.5 w-16 text-xs"
                       value={item.quantity ?? ''}
-                      onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
+                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'quantity', value: e.target.value })}
                     />
                   </td>
                   <td className="py-1.5 pr-2">
                     <input
                       className="border rounded px-1 py-0.5 w-14 text-xs"
                       value={item.unit}
-                      onChange={(e) => updateItem(idx, 'unit', e.target.value)}
+                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'unit', value: e.target.value })}
                     />
                   </td>
                   <td className="py-1.5 pr-2 text-xs text-slate-500">{item.quantity_display}</td>
@@ -354,13 +390,13 @@ function Recipe() {
       </div>
       <div className="flex gap-3">
         <button
-          onClick={() => setStep(STEP.LIST)}
+          onClick={() => dispatch({ type: 'GO_TO_LIST' })}
           className="flex-1 border border-brand text-brand px-4 py-2 rounded-lg font-medium"
         >
           Back to List
         </button>
         <button
-          onClick={reset}
+          onClick={() => dispatch({ type: 'RESET_FLOW' })}
           className="flex-1 bg-brand text-white px-4 py-2 rounded-lg font-medium"
         >
           Add Another Recipe

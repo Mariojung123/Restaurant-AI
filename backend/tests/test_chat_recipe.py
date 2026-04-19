@@ -7,12 +7,14 @@ import pytest
 
 from models.database import ChatHistory, Ingredient, Recipe, RecipeIngredient
 from routers.chat import (
-    _format_confirmation_message,
-    _get_pending_recipe,
     _is_confirmation,
     _is_recipe_register_intent,
     _is_rejection,
-    _save_pending_recipe,
+)
+from services.pending_recipe import (
+    format_confirmation_message as _format_confirmation_message,
+    get_pending as _get_pending_recipe,
+    save_pending as _save_pending_recipe,
 )
 
 

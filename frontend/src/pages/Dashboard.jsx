@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
+import { getForecast } from '../api/inventory';
 
-// Dashboard page: shows depletion forecast fetched from /api/inventory/forecast.
 function Dashboard() {
   const [forecast, setForecast] = useState([]);
   const [status, setStatus] = useState('loading');
@@ -11,11 +11,7 @@ function Dashboard() {
 
     async function loadForecast() {
       try {
-        const response = await fetch('/api/inventory/forecast');
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
-        const data = await response.json();
+        const data = await getForecast();
         if (!cancelled) {
           setForecast(data);
           setStatus('ready');

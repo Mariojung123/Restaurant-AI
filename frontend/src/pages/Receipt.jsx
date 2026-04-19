@@ -1,80 +1,95 @@
-import { useRef, useState } from 'react';
+import { useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { previewReceipt, confirmReceipt } from '../api/vision.js';
+import { ImageUploadZone } from '../components/ImageUploadZone.jsx';
+import { useVisionUpload } from '../hooks/useVisionUpload.js';
 
 const STEP = { UPLOAD: 'upload', REVIEW: 'review', DONE: 'done' };
 
+const initialState = {
+  step: STEP.UPLOAD,
+  saleDate: '',
+  items: [],
+  duplicateWarning: false,
+  loading: false,
+  result: null,
+  error: '',
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'ANALYZE_START':
+      return { ...state, loading: true, error: '' };
+    case 'ANALYZE_SUCCESS':
+      return {
+        ...state,
+        loading: false,
+        step: STEP.REVIEW,
+        saleDate: action.saleDate,
+        duplicateWarning: action.duplicateWarning,
+        items: action.items,
+      };
+    case 'CONFIRM_START':
+      return { ...state, loading: true, error: '' };
+    case 'CONFIRM_SUCCESS':
+      return { ...state, loading: false, step: STEP.DONE, result: action.result };
+    case 'REQUEST_ERROR':
+      return { ...state, loading: false, error: action.error };
+    case 'SET_SALE_DATE':
+      return { ...state, saleDate: action.value };
+    case 'UPDATE_ITEM':
+      return {
+        ...state,
+        items: state.items.map((it, i) =>
+          i === action.idx ? { ...it, [action.field]: action.value } : it
+        ),
+      };
+    case 'SET_MATCH':
+      return {
+        ...state,
+        items: state.items.map((it, i) => {
+          if (i !== action.idx) return it;
+          return action.value === '__skip__'
+            ? { ...it, recipe_id: null, _pendingRecipeId: null }
+            : { ...it, recipe_id: parseInt(action.value, 10), _pendingRecipeId: parseInt(action.value, 10) };
+        }),
+      };
+    case 'RESET':
+      return initialState;
+    default:
+      return state;
+  }
+}
+
 function Receipt() {
-  const [step, setStep] = useState(STEP.UPLOAD);
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [saleDate, setSaleDate] = useState('');
-  const [items, setItems] = useState([]);
-  const [duplicateWarning, setDuplicateWarning] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-  const fileInputRef = useRef(null);
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const { step, saleDate, items, duplicateWarning, loading, result, error } = state;
+  const { file, preview, fileInputRef, handleFileChange, reset: resetUpload } = useVisionUpload();
   const navigate = useNavigate();
-
-  function handleFileChange(f) {
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
-    setError('');
-  }
-
-  function handleDrop(e) {
-    e.preventDefault();
-    const f = e.dataTransfer.files[0];
-    if (f) handleFileChange(f);
-  }
 
   async function handleAnalyze() {
     if (!file) return;
-    setLoading(true);
-    setError('');
+    dispatch({ type: 'ANALYZE_START' });
     try {
       const data = await previewReceipt(file);
-      setSaleDate(data.sale_date ?? '');
-      setDuplicateWarning(data.duplicate_warning);
-      setItems(
-        data.items.map((it) => ({
+      dispatch({
+        type: 'ANALYZE_SUCCESS',
+        saleDate: data.sale_date ?? '',
+        duplicateWarning: data.duplicate_warning,
+        items: data.items.map((it) => ({
           ...it,
           include: it.suggested_match !== null,
           recipe_id: it.suggested_match?.id ?? null,
           _pendingRecipeId: it.suggested_match?.id ?? null,
-        }))
-      );
-      setStep(STEP.REVIEW);
+        })),
+      });
     } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function updateItem(idx, field, value) {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
-  }
-
-  function handleMatchSelect(idx, value) {
-    if (value === '__skip__') {
-      setItems((prev) =>
-        prev.map((it, i) => (i === idx ? { ...it, recipe_id: null, _pendingRecipeId: null } : it))
-      );
-    } else {
-      const id = parseInt(value, 10);
-      setItems((prev) =>
-        prev.map((it, i) =>
-          i === idx ? { ...it, recipe_id: id, _pendingRecipeId: id } : it
-        )
-      );
+      dispatch({ type: 'REQUEST_ERROR', error: e.message });
     }
   }
 
   async function handleConfirm() {
-    setLoading(true);
-    setError('');
+    dispatch({ type: 'CONFIRM_START' });
     try {
       const data = await confirmReceipt({
         sale_date: saleDate || null,
@@ -87,24 +102,15 @@ function Receipt() {
           include: it.include,
         })),
       });
-      setResult(data);
-      setStep(STEP.DONE);
+      dispatch({ type: 'CONFIRM_SUCCESS', result: data });
     } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
+      dispatch({ type: 'REQUEST_ERROR', error: e.message });
     }
   }
 
   function reset() {
-    setStep(STEP.UPLOAD);
-    setFile(null);
-    setPreview(null);
-    setItems([]);
-    setSaleDate('');
-    setDuplicateWarning(false);
-    setResult(null);
-    setError('');
+    resetUpload();
+    dispatch({ type: 'RESET' });
   }
 
   function matchBadge(item, idx) {
@@ -117,7 +123,7 @@ function Receipt() {
         <select
           className="text-xs border rounded px-1 py-0.5 text-yellow-700 bg-yellow-50"
           value={item._pendingRecipeId !== null ? String(item._pendingRecipeId) : '__skip__'}
-          onChange={(e) => handleMatchSelect(idx, e.target.value)}
+          onChange={(e) => dispatch({ type: 'SET_MATCH', idx, value: e.target.value })}
         >
           {item.suggested_match && (
             <option value={String(item.suggested_match.id)}>
@@ -135,28 +141,13 @@ function Receipt() {
     return (
       <div className="flex flex-col gap-6">
         <h1 className="text-xl font-semibold">Receipt Scan</h1>
-        <div
-          className="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center gap-3 cursor-pointer hover:border-brand transition-colors"
-          onClick={() => fileInputRef.current?.click()}
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-        >
-          {preview ? (
-            <img src={preview} alt="preview" className="max-h-48 rounded" />
-          ) : (
-            <>
-              <span className="text-4xl">🧾</span>
-              <p className="text-slate-500 text-sm">Click or drag a receipt image here</p>
-            </>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            className="hidden"
-            onChange={(e) => e.target.files[0] && handleFileChange(e.target.files[0])}
-          />
-        </div>
+        <ImageUploadZone
+          preview={preview}
+          fileInputRef={fileInputRef}
+          onFile={handleFileChange}
+          icon="🧾"
+          hint="Click or drag a receipt image here"
+        />
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <button
           onClick={handleAnalyze}
@@ -183,7 +174,7 @@ function Receipt() {
           <input
             className="border rounded px-2 py-1 text-sm max-w-xs"
             value={saleDate}
-            onChange={(e) => setSaleDate(e.target.value)}
+            onChange={(e) => dispatch({ type: 'SET_SALE_DATE', value: e.target.value })}
             placeholder="YYYY-MM-DD"
           />
         </div>
@@ -209,28 +200,28 @@ function Receipt() {
                     <input
                       type="checkbox"
                       checked={item.include}
-                      onChange={(e) => updateItem(idx, 'include', e.target.checked)}
+                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'include', value: e.target.checked })}
                     />
                   </td>
                   <td className="py-1.5 pr-2">
                     <input
                       className="border rounded px-1 py-0.5 w-full text-xs"
                       value={item.name}
-                      onChange={(e) => updateItem(idx, 'name', e.target.value)}
+                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'name', value: e.target.value })}
                     />
                   </td>
                   <td className="py-1.5 pr-2">
                     <input
                       className="border rounded px-1 py-0.5 w-14 text-xs"
                       value={item.quantity}
-                      onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
+                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'quantity', value: e.target.value })}
                     />
                   </td>
                   <td className="py-1.5 pr-2">
                     <input
                       className="border rounded px-1 py-0.5 w-16 text-xs"
                       value={item.unit_price ?? ''}
-                      onChange={(e) => updateItem(idx, 'unit_price', e.target.value)}
+                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'unit_price', value: e.target.value })}
                       placeholder="—"
                     />
                   </td>
@@ -238,7 +229,7 @@ function Receipt() {
                     <input
                       className="border rounded px-1 py-0.5 w-16 text-xs"
                       value={item.total_price ?? ''}
-                      onChange={(e) => updateItem(idx, 'total_price', e.target.value)}
+                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'total_price', value: e.target.value })}
                       placeholder="—"
                     />
                   </td>

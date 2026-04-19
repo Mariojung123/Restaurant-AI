@@ -2,7 +2,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 from models.database import Ingredient, Recipe, SalesLog
-from routers.chat import _build_context
+from services.chat_context import build_context as _build_context
 
 
 def test_chat_requires_session_id(client):

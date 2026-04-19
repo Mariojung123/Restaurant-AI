@@ -1,7 +1,5 @@
 """Invoice vision endpoints — parse, preview, and confirm invoice images."""
 
-import base64
-import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -9,12 +7,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from models.database import InventoryLog, get_db
-from services.claude import parse_image_with_claude, strip_fences
 from services.invoice import fuzzy_match_ingredient, process_invoice_items
+from services.vision_common import call_vision_api, parse_vision_json, read_upload_file
 
 router = APIRouter()
-
-_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 _INVOICE_EXTRACTION_PROMPT = (
     "You are a data extraction assistant for a restaurant inventory system. "
@@ -96,25 +92,6 @@ class ConfirmRequest(BaseModel):
     items: list[ConfirmItem]
 
 
-def _parse_invoice_json(raw: str) -> InvoiceParseResult:
-    cleaned = strip_fences(raw)
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Claude returned non-JSON: {exc}") from exc
-    try:
-        return InvoiceParseResult(
-            supplier_name=data.get("supplier_name"),
-            invoice_date=data.get("invoice_date"),
-            items=[InvoiceLineItem(**i) for i in data.get("items", [])],
-        )
-    except Exception as exc:
-        raise ValueError(f"Invalid invoice structure: {exc}") from exc
-
-
-def _read_and_encode(file_bytes: bytes) -> str:
-    return base64.b64encode(file_bytes).decode("ascii")
-
 
 @router.post("/preview", response_model=PreviewResponse)
 async def preview_invoice(
@@ -122,25 +99,10 @@ async def preview_invoice(
     db: Session = Depends(get_db),
 ) -> PreviewResponse:
     """Parse invoice image, return items with fuzzy match suggestions. No DB writes."""
-    if file.content_type not in _ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported image type: {file.content_type}")
-
-    raw_bytes = await file.read()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
+    raw_bytes = await read_upload_file(file)
+    raw_text = call_vision_api(raw_bytes, file.content_type, _INVOICE_EXTRACTION_PROMPT)
     try:
-        raw_text = parse_image_with_claude(
-            image_base64=_read_and_encode(raw_bytes),
-            prompt=_INVOICE_EXTRACTION_PROMPT,
-            media_type=file.content_type,
-            max_tokens=2048,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    try:
-        parsed = _parse_invoice_json(raw_text)
+        parsed = parse_vision_json(raw_text, InvoiceParseResult, "invoice")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -215,25 +177,10 @@ async def process_invoice(
     db: Session = Depends(get_db),
 ) -> InvoiceResponse:
     """Parse an invoice image and auto-update inventory (no preview step)."""
-    if file.content_type not in _ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported image type: {file.content_type}")
-
-    raw_bytes = await file.read()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
+    raw_bytes = await read_upload_file(file)
+    raw_text = call_vision_api(raw_bytes, file.content_type, _INVOICE_EXTRACTION_PROMPT)
     try:
-        raw_text = parse_image_with_claude(
-            image_base64=_read_and_encode(raw_bytes),
-            prompt=_INVOICE_EXTRACTION_PROMPT,
-            media_type=file.content_type,
-            max_tokens=2048,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    try:
-        parsed = _parse_invoice_json(raw_text)
+        parsed = parse_vision_json(raw_text, InvoiceParseResult, "invoice")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
