@@ -2,6 +2,8 @@
 
 > A natural language AI operations partner for small independent restaurants — built as a portfolio project.
 
+📄 **[View Full Project Specification →](https://mariojung123.github.io/Restaurant-AI/restaurant-ai-spec-en.html)**
+
 ---
 
 ## What This Is
