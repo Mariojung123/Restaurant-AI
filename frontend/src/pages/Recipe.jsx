@@ -1,23 +1,23 @@
 import { useEffect, useReducer } from 'react';
-import { listRecipes, getRecipe, previewRecipe, confirmRecipe, updateRecipe, deleteRecipe } from '../api/recipe.js';
+import { listRecipes, getRecipe, confirmRecipe, updateRecipe, deleteRecipe } from '../api/recipe.js';
+import { listIngredients } from '../api/inventory.js';
 
-const STEP = { LIST: 'list', INPUT: 'input', REVIEW: 'review', DONE: 'done', DETAIL: 'detail', EDIT: 'edit' };
-const EMPTY_FORM = { name: '', price: '', description: '', ingredientText: '' };
+const STEP = { LIST: 'list', INPUT: 'input', DONE: 'done', DETAIL: 'detail', EDIT: 'edit' };
+const UNITS = ['g', 'ml', 'ea', 'tsp', 'tbsp', 'oz', 'cup', 'kg', 'L'];
+const EMPTY_FORM = { name: '', price: '', description: '' };
+const emptyRow = () => ({ ingredientId: '', quantity: '', unit: 'g' });
 
 const initialState = {
   step: STEP.LIST,
-  // list view
   recipes: [],
   listStatus: 'loading',
   listError: null,
-  // detail / edit
   selectedRecipe: null,
   detailStatus: 'idle',
   deleteConfirm: false,
-  // registration flow
   form: EMPTY_FORM,
-  items: [],
-  previewMeta: null,
+  ingredientRows: [emptyRow()],
+  ingredients: [],
   loading: false,
   error: '',
   result: null,
@@ -32,11 +32,9 @@ function reducer(state, action) {
     case 'LIST_ERROR':
       return { ...state, listStatus: 'error', listError: action.error };
     case 'GO_TO_INPUT':
-      return { ...state, step: STEP.INPUT, error: '' };
+      return { ...state, step: STEP.INPUT, error: '', form: EMPTY_FORM, ingredientRows: [emptyRow()] };
     case 'GO_TO_LIST':
       return { ...state, step: STEP.LIST, deleteConfirm: false };
-    case 'GO_TO_INPUT_FROM_REVIEW':
-      return { ...state, step: STEP.INPUT };
     case 'GO_TO_DETAIL':
       return { ...state, step: STEP.DETAIL, selectedRecipe: action.recipe, detailStatus: 'ready', deleteConfirm: false, error: '' };
     case 'DETAIL_LOADING':
@@ -49,57 +47,43 @@ function reducer(state, action) {
           name: state.selectedRecipe.name,
           price: String(state.selectedRecipe.price),
           description: state.selectedRecipe.description ?? '',
-          ingredientText: '',
         },
+        ingredientRows: state.selectedRecipe.ingredients.map((ing) => ({
+          ingredientId: String(ing.ingredient_id),
+          quantity: ing.quantity != null ? String(ing.quantity) : '',
+          unit: ing.unit,
+        })),
         error: '',
       };
     case 'SET_DELETE_CONFIRM':
       return { ...state, deleteConfirm: action.value };
     case 'FORM_UPDATE':
       return { ...state, form: { ...state.form, [action.field]: action.value } };
-    case 'ANALYZE_START':
-      return { ...state, loading: true, error: '' };
-    case 'ANALYZE_SUCCESS':
-      return {
-        ...state,
-        loading: false,
-        step: STEP.REVIEW,
-        previewMeta: { name: action.name, description: action.description, price: action.price },
-        items: action.items,
-      };
+    case 'INGREDIENTS_LOADED':
+      return { ...state, ingredients: action.ingredients };
+    case 'ADD_ROW':
+      return { ...state, ingredientRows: [...state.ingredientRows, emptyRow()] };
+    case 'REMOVE_ROW':
+      return { ...state, ingredientRows: state.ingredientRows.filter((_, i) => i !== action.idx) };
+    case 'UPDATE_ROW': {
+      const rows = state.ingredientRows.map((r, i) => {
+        if (i !== action.idx) return r;
+        const updated = { ...r, [action.field]: action.value };
+        if (action.field === 'ingredientId' && action.autoUnit) {
+          updated.unit = action.autoUnit;
+        }
+        return updated;
+      });
+      return { ...state, ingredientRows: rows };
+    }
     case 'SAVE_START':
       return { ...state, loading: true, error: '' };
     case 'SAVE_SUCCESS':
       return { ...state, loading: false, step: STEP.DONE, result: action.result };
     case 'REQUEST_ERROR':
       return { ...state, loading: false, error: action.error };
-    case 'UPDATE_ITEM':
-      return {
-        ...state,
-        items: state.items.map((it, i) =>
-          i === action.idx ? { ...it, [action.field]: action.value } : it
-        ),
-      };
-    case 'SET_MATCH':
-      return {
-        ...state,
-        items: state.items.map((it, i) => {
-          if (i !== action.idx) return it;
-          return action.value === '__new__'
-            ? { ...it, ingredient_id: null, _useNew: true }
-            : { ...it, ingredient_id: parseInt(action.value, 10), _useNew: false };
-        }),
-      };
     case 'RESET_FLOW':
-      return {
-        ...state,
-        step: STEP.INPUT,
-        form: EMPTY_FORM,
-        items: [],
-        previewMeta: null,
-        result: null,
-        error: '',
-      };
+      return { ...state, step: STEP.INPUT, form: EMPTY_FORM, ingredientRows: [emptyRow()], result: null, error: '' };
     default:
       return state;
   }
@@ -110,20 +94,25 @@ function Recipe() {
   const {
     step, recipes, listStatus, listError,
     selectedRecipe, detailStatus, deleteConfirm,
-    form, items, previewMeta, loading, error, result,
+    form, ingredientRows, ingredients, loading, error, result,
   } = state;
 
   useEffect(() => {
     if (step !== STEP.LIST) return;
     let cancelled = false;
     dispatch({ type: 'LIST_LOADING' });
-
     listRecipes()
       .then((data) => { if (!cancelled) dispatch({ type: 'LIST_SUCCESS', recipes: data }); })
       .catch((e) => { if (!cancelled) dispatch({ type: 'LIST_ERROR', error: e.message }); });
-
     return () => { cancelled = true; };
   }, [step]);
+
+  useEffect(() => {
+    if ((step !== STEP.INPUT && step !== STEP.EDIT) || ingredients.length > 0) return;
+    listIngredients()
+      .then((data) => dispatch({ type: 'INGREDIENTS_LOADED', ingredients: data }))
+      .catch(() => {});
+  }, [step, ingredients.length]);
 
   async function handleSelectRecipe(recipeId) {
     dispatch({ type: 'DETAIL_LOADING' });
@@ -138,12 +127,15 @@ function Recipe() {
   async function handleUpdate() {
     dispatch({ type: 'SAVE_START' });
     try {
+      const items = buildItems(ingredientRows);
       const updated = await updateRecipe(selectedRecipe.id, {
         name: form.name.trim(),
         description: form.description.trim() || null,
         price: parseFloat(form.price) || 0,
+        items,
       });
-      dispatch({ type: 'GO_TO_DETAIL', recipe: { ...selectedRecipe, ...updated } });
+      const detail = await getRecipe(selectedRecipe.id);
+      dispatch({ type: 'GO_TO_DETAIL', recipe: detail });
     } catch (e) {
       dispatch({ type: 'REQUEST_ERROR', error: e.message });
     }
@@ -159,47 +151,19 @@ function Recipe() {
     }
   }
 
-  async function handleAnalyze() {
-    dispatch({ type: 'ANALYZE_START' });
-    try {
-      const data = await previewRecipe({
-        name: form.name,
-        description: form.description || null,
-        price: parseFloat(form.price) || 0,
-        ingredient_text: form.ingredientText,
-      });
-      dispatch({
-        type: 'ANALYZE_SUCCESS',
-        name: data.name,
-        description: data.description,
-        price: data.price,
-        items: data.items.map((it) => ({
-          ...it,
-          include: true,
-          ingredient_id: it.suggested_match?.id ?? null,
-          _useNew: !it.suggested_match || it.match_score < 0.7,
-        })),
-      });
-    } catch (e) {
-      dispatch({ type: 'REQUEST_ERROR', error: e.message });
-    }
-  }
-
   async function handleSave() {
+    const items = buildItems(ingredientRows);
+    if (items.length === 0) {
+      dispatch({ type: 'REQUEST_ERROR', error: 'Add at least one ingredient with a quantity.' });
+      return;
+    }
     dispatch({ type: 'SAVE_START' });
     try {
       const data = await confirmRecipe({
-        name: previewMeta.name,
-        description: previewMeta.description,
-        price: previewMeta.price,
-        items: items.map((it) => ({
-          name: it.name,
-          quantity: it.quantity ? parseFloat(it.quantity) : null,
-          unit: it.unit,
-          quantity_display: it.quantity_display,
-          ingredient_id: it.include && !it._useNew ? it.ingredient_id : null,
-          include: it.include,
-        })),
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        price: parseFloat(form.price) || 0,
+        items,
       });
       dispatch({ type: 'SAVE_SUCCESS', result: data });
     } catch (e) {
@@ -207,35 +171,84 @@ function Recipe() {
     }
   }
 
-  function matchBadge(item, idx) {
-    if (!item.include) return null;
-    if (item.match_score === 1.0) {
-      return <span className="text-xs text-green-600 font-medium">✓ Matched</span>;
-    }
-    if (item.match_score >= 0.7) {
-      return (
-        <select
-          className="text-xs border rounded px-1 py-0.5 text-yellow-700 bg-yellow-50"
-          value={item._useNew ? '__new__' : String(item.ingredient_id ?? '__new__')}
-          onChange={(e) => dispatch({ type: 'SET_MATCH', idx, value: e.target.value })}
-        >
-          {item.suggested_match && (
-            <option value={String(item.suggested_match.id)}>
-              {item.suggested_match.name}
-            </option>
-          )}
-          <option value="__new__">Create new</option>
-        </select>
-      );
-    }
-    return <span className="text-xs text-blue-600 font-medium">✨ New ingredient</span>;
+  function handleRowIngredientChange(idx, ingredientId) {
+    const ing = ingredients.find((i) => i.id === parseInt(ingredientId, 10));
+    dispatch({ type: 'UPDATE_ROW', idx, field: 'ingredientId', value: ingredientId, autoUnit: ing?.unit });
   }
 
-  // ── Step DETAIL ───────────────────────────────────────────────────────────────
+  function buildItems(rows) {
+    return rows
+      .filter((r) => r.ingredientId && r.quantity)
+      .map((r) => {
+        const ing = ingredients.find((i) => i.id === parseInt(r.ingredientId, 10));
+        return {
+          name: ing.name,
+          quantity: parseFloat(r.quantity),
+          unit: r.unit,
+          quantity_display: `${r.quantity}${r.unit}`,
+          ingredient_id: ing.id,
+          include: true,
+        };
+      });
+  }
+
+  function renderIngredientRows() {
+    const usedIds = new Set(ingredientRows.map((r) => r.ingredientId).filter(Boolean));
+    return (
+      <>
+        {ingredientRows.map((row, idx) => (
+          <div key={idx} className="flex gap-2 items-center">
+            <select
+              className="flex-1 border rounded px-2 py-1.5 text-sm text-slate-700 bg-white"
+              value={row.ingredientId}
+              onChange={(e) => handleRowIngredientChange(idx, e.target.value)}
+            >
+              <option value="">Select ingredient…</option>
+              {ingredients.map((ing) => (
+                <option
+                  key={ing.id}
+                  value={ing.id}
+                  disabled={usedIds.has(String(ing.id)) && row.ingredientId !== String(ing.id)}
+                >
+                  {ing.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className="w-20 border rounded px-2 py-1.5 text-sm"
+              type="number" min="0" step="any" placeholder="Qty"
+              value={row.quantity}
+              onChange={(e) => dispatch({ type: 'UPDATE_ROW', idx, field: 'quantity', value: e.target.value })}
+            />
+            <select
+              className="w-20 border rounded px-2 py-1.5 text-sm bg-white"
+              value={row.unit}
+              onChange={(e) => dispatch({ type: 'UPDATE_ROW', idx, field: 'unit', value: e.target.value })}
+            >
+              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+            <button
+              onClick={() => dispatch({ type: 'REMOVE_ROW', idx })}
+              disabled={ingredientRows.length === 1}
+              className="text-slate-400 hover:text-red-500 disabled:opacity-20 text-lg leading-none px-1"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => dispatch({ type: 'ADD_ROW' })}
+          className="self-start text-sm text-brand hover:underline mt-1"
+        >
+          + Add Ingredient
+        </button>
+      </>
+    );
+  }
+
+  // ── DETAIL ───────────────────────────────────────────────────────────────────
   if (step === STEP.DETAIL) {
-    if (detailStatus === 'loading') {
-      return <p className="text-sm text-slate-500">Loading...</p>;
-    }
+    if (detailStatus === 'loading') return <p className="text-sm text-slate-500">Loading...</p>;
     const r = selectedRecipe;
     return (
       <div className="flex flex-col gap-4">
@@ -304,11 +317,7 @@ function Recipe() {
             >
               Cancel
             </button>
-            <button
-              onClick={handleDelete}
-              disabled={loading}
-              className="text-sm bg-red-600 text-white px-2 py-1 rounded disabled:opacity-40"
-            >
+            <button onClick={handleDelete} disabled={loading} className="text-sm bg-red-600 text-white px-2 py-1 rounded disabled:opacity-40">
               {loading ? '...' : 'Delete'}
             </button>
           </div>
@@ -317,7 +326,7 @@ function Recipe() {
     );
   }
 
-  // ── Step EDIT ─────────────────────────────────────────────────────────────────
+  // ── EDIT ─────────────────────────────────────────────────────────────────────
   if (step === STEP.EDIT) {
     const canSave = form.name.trim();
     return (
@@ -342,9 +351,7 @@ function Recipe() {
             <label className="text-xs text-slate-500">Price ($)</label>
             <input
               className="border rounded px-2 py-1.5 text-sm"
-              type="number"
-              min="0"
-              step="0.01"
+              type="number" min="0" step="0.01"
               value={form.price}
               onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'price', value: e.target.value })}
             />
@@ -360,15 +367,9 @@ function Recipe() {
           />
         </div>
 
-        <div>
-          <p className="text-xs text-slate-500 mb-2">Ingredients (view only — to change ingredients, delete and re-add the recipe)</p>
-          <ul className="space-y-1">
-            {selectedRecipe.ingredients.map((ing) => (
-              <li key={ing.link_id} className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
-                {ing.name} — {ing.quantity_display ?? `${ing.quantity ?? ''}${ing.unit}`}
-              </li>
-            ))}
-          </ul>
+        <div className="flex flex-col gap-2">
+          <label className="text-xs text-slate-500">Ingredients</label>
+          {renderIngredientRows()}
         </div>
 
         {error && <p className="text-red-600 text-sm">{error}</p>}
@@ -384,7 +385,7 @@ function Recipe() {
     );
   }
 
-  // ── Step LIST ─────────────────────────────────────────────────────────────────
+  // ── LIST ─────────────────────────────────────────────────────────────────────
   if (step === STEP.LIST) {
     return (
       <section className="space-y-4">
@@ -433,11 +434,12 @@ function Recipe() {
     );
   }
 
-  // ── Step INPUT ───────────────────────────────────────────────────────────────
+  // ── INPUT ────────────────────────────────────────────────────────────────────
   if (step === STEP.INPUT) {
-    const canAnalyze = form.name.trim() && form.ingredientText.trim();
+    const canSave = form.name.trim() && ingredientRows.some((r) => r.ingredientId && r.quantity);
+
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2">
           <button onClick={() => dispatch({ type: 'GO_TO_LIST' })} className="text-slate-500 text-sm hover:text-slate-700">
             ← Back
@@ -459,9 +461,7 @@ function Recipe() {
             <label className="text-xs text-slate-500">Price ($)</label>
             <input
               className="border rounded px-2 py-1.5 text-sm"
-              type="number"
-              min="0"
-              step="0.01"
+              type="number" min="0" step="0.01"
               value={form.price}
               onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'price', value: e.target.value })}
               placeholder="0.00"
@@ -479,107 +479,16 @@ function Recipe() {
           />
         </div>
 
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           <label className="text-xs text-slate-500">Ingredients *</label>
-          <textarea
-            className="border rounded px-2 py-1.5 text-sm min-h-[100px]"
-            value={form.ingredientText}
-            onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'ingredientText', value: e.target.value })}
-            placeholder="salmon fillet 200g, butter 1 tablespoon, heavy cream 100ml, garlic 2 cloves"
-          />
-        </div>
-
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-
-        <button
-          onClick={handleAnalyze}
-          disabled={!canAnalyze || loading}
-          className="bg-brand text-white px-4 py-2 rounded-lg font-medium disabled:opacity-40"
-        >
-          {loading ? 'Analyzing...' : 'Analyze'}
-        </button>
-      </div>
-    );
-  }
-
-  // ── Step REVIEW ──────────────────────────────────────────────────────────────
-  if (step === STEP.REVIEW) {
-    return (
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-2">
-          <button onClick={() => dispatch({ type: 'GO_TO_INPUT_FROM_REVIEW' })} className="text-slate-500 text-sm hover:text-slate-700">
-            ← Back
-          </button>
-          <h1 className="text-xl font-semibold">Review Ingredients</h1>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-          <span className="font-medium">{previewMeta?.name}</span>
-          {previewMeta?.price > 0 && (
-            <span className="ml-2 text-slate-500">${parseFloat(previewMeta.price).toFixed(2)}</span>
-          )}
-          {previewMeta?.description && (
-            <p className="text-xs text-slate-500 mt-0.5">{previewMeta.description}</p>
-          )}
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b text-left text-xs text-slate-500">
-                <th className="pb-2 pr-2">☑</th>
-                <th className="pb-2 pr-2">Ingredient</th>
-                <th className="pb-2 pr-2">Qty</th>
-                <th className="pb-2 pr-2">Unit</th>
-                <th className="pb-2 pr-2">Display</th>
-                <th className="pb-2 pr-2">Claude's note</th>
-                <th className="pb-2">Match</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item, idx) => (
-                <tr
-                  key={idx}
-                  className={['border-b', !item.include ? 'opacity-40' : ''].join(' ')}
-                >
-                  <td className="py-1.5 pr-2">
-                    <input
-                      type="checkbox"
-                      checked={item.include}
-                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'include', value: e.target.checked })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2 text-xs text-slate-700">{item.name}</td>
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className="border rounded px-1 py-0.5 w-16 text-xs"
-                      value={item.quantity ?? ''}
-                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'quantity', value: e.target.value })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className="border rounded px-1 py-0.5 w-14 text-xs"
-                      value={item.unit}
-                      onChange={(e) => dispatch({ type: 'UPDATE_ITEM', idx, field: 'unit', value: e.target.value })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2 text-xs text-slate-500">{item.quantity_display}</td>
-                  <td className="py-1.5 pr-2 text-xs text-slate-400 max-w-[180px]">
-                    {item.reasoning}
-                  </td>
-                  <td className="py-1.5">{matchBadge(item, idx)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {renderIngredientRows()}
         </div>
 
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
         <button
           onClick={handleSave}
-          disabled={loading}
+          disabled={!canSave || loading}
           className="bg-brand text-white px-4 py-2 rounded-lg font-medium disabled:opacity-40"
         >
           {loading ? 'Saving...' : 'Save Recipe'}
@@ -588,7 +497,7 @@ function Recipe() {
     );
   }
 
-  // ── Step DONE ─────────────────────────────────────────────────────────────────
+  // ── DONE ─────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">Done</h1>

@@ -25,6 +25,7 @@ from services.recipe_svc import (
     delete_recipe_by_id,
     get_recipe_detail,
     save_recipe_core,
+    replace_recipe_ingredients,
     update_recipe_fields,
 )
 
@@ -155,6 +156,7 @@ class RecipeUpdateIn(BaseModel):
     name: str
     description: Optional[str] = None
     price: float = 0.0
+    items: Optional[list[ConfirmItem]] = None
 
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
@@ -272,10 +274,12 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)) -> RecipeDetailOut
 def update_recipe(recipe_id: int, payload: RecipeUpdateIn, db: Session = Depends(get_db)) -> RecipeOut:
     try:
         recipe = update_recipe_fields(db, recipe_id, payload.name, payload.description, payload.price)
+        if recipe is None:
+            raise HTTPException(status_code=404, detail="Recipe not found")
+        if payload.items is not None:
+            replace_recipe_ingredients(db, recipe_id, [i.model_dump() for i in payload.items])
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    if recipe is None:
-        raise HTTPException(status_code=404, detail="Recipe not found")
     db.commit()
     db.refresh(recipe)
     return recipe

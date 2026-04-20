@@ -1,5 +1,9 @@
 import { get } from './client';
 
+export function listIngredients() {
+  return get('/api/inventory/ingredients');
+}
+
 export function getForecast() {
   return get('/api/inventory/forecast');
 }

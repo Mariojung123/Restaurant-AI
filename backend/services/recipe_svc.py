@@ -85,6 +85,21 @@ def get_recipe_detail(db: Session, recipe_id: int) -> dict | None:
     }
 
 
+def replace_recipe_ingredients(db: Session, recipe_id: int, items: list[dict]) -> None:
+    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
+    for item in items:
+        ingredient = db.query(Ingredient).filter(Ingredient.id == item["ingredient_id"]).first()
+        if ingredient is None:
+            raise ValueError(f"Ingredient not found: {item['ingredient_id']}")
+        db.add(RecipeIngredient(
+            recipe_id=recipe_id,
+            ingredient_id=ingredient.id,
+            quantity=item.get("quantity"),
+            unit=item.get("unit", "unit"),
+            quantity_display=item.get("quantity_display"),
+        ))
+
+
 def update_recipe_fields(
     db: Session, recipe_id: int, name: str, description: str | None, price: float
 ) -> Recipe | None:
