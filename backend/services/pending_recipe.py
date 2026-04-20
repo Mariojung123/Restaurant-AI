@@ -55,12 +55,38 @@ def resolve_items(db: Session, pending: dict) -> list[dict]:
     return resolved
 
 
+def _has_korean(text: str) -> bool:
+    return any("\uAC00" <= ch <= "\uD7A3" or "\u1100" <= ch <= "\u11FF" for ch in text)
+
+
+def apply_pending_update(pending: dict, updates: dict) -> dict:
+    merged = dict(pending)
+    if updates.get("price") is not None:
+        merged["price"] = updates["price"]
+    if updates.get("name") is not None:
+        merged["name"] = updates["name"]
+    if updates.get("items") is not None:
+        merged["items"] = updates["items"]
+    return merged
+
+
 def format_confirmation_message(parsed: dict) -> str:
-    lines = [f"**{parsed['name']}** 레시피를 등록할게요! 아래 재료를 확인해주세요:\n"]
+    korean = parsed.get("lang") == "ko"
+    if korean:
+        header = f"**{parsed['name']}** 레시피를 등록할게요! 아래 재료를 확인해주세요:\n"
+        footer = "\n등록할까요? (네 / 아니오)"
+    else:
+        header = f"I'll register **{parsed['name']}** as a new recipe. Please confirm the ingredients below:\n"
+        footer = "\nShall I add this recipe? (Yes / No)"
+
+    lines = [header]
     for item in parsed["items"]:
         line = f"- {item['name']}: {item['quantity_display']} → {item['quantity']}{item['unit']}"
         if item.get("reasoning"):
             line += f"  ({item['reasoning']})"
         lines.append(line)
-    lines.append("\n등록할까요? (네 / 아니오)")
+    price = parsed.get("price")
+    if price is not None:
+        lines.append(f"- **Price: ${float(price):.2f}**")
+    lines.append(footer)
     return "\n".join(lines)

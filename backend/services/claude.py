@@ -14,12 +14,15 @@ from anthropic import Anthropic
 
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a friendly AI operations partner for a small restaurant owner. "
     "Always respond in the same language the user writes in. "
     "Speak warmly and concisely, like a trusted colleague on a messenger app. "
-    "Help interpret sales, inventory, and ordering data, and proactively suggest next steps."
+    "Help interpret sales, inventory, and ordering data, and proactively suggest next steps. "
+    "When the user asks to add or register a recipe, the system will automatically handle it — "
+    "just acknowledge naturally and let the system do the work."
 )
 
 _client: Optional[Anthropic] = None
@@ -163,10 +166,10 @@ _RECIPE_CHAT_PARSE_SYSTEM = (
     "- 한 작은술 / 1 teaspoon: salt ~5g, sugar ~4g, liquid ~5ml\n\n"
     + _VAGUE_UNIT_REFERENCE
     + "\n\nReturn ONLY valid JSON, no markdown fences, no extra text:\n"
-    '{"name": "<recipe name in original language>", "items": ['
+    '{"name": "<recipe name in original language>", "price": <number or null>, "items": ['
     '{"name": "<English ingredient name>", "quantity": <number>, "unit": "<g|ml|ea>", '
     '"quantity_display": "<original expression exactly as written>", '
-    '"reasoning": "<Korean/English explanation IF vague unit was converted, e.g. \'마늘 한 큰술은 약 9g 정도 입니다!\', else null>"}]}'
+    '"reasoning": "<English explanation IF vague unit was converted, e.g. \'1 tablespoon of garlic is about 9g\', else null>"}]}'
 )
 
 _RECIPE_CHAT_PARSE_PROMPT = "Extract the recipe name and ingredients from this message:\n\n{message}"
@@ -191,6 +194,47 @@ def extract_recipe_from_chat(message: str) -> dict:
     if "name" not in data or "items" not in data:
         raise ValueError("Claude response missing required fields")
     return data
+
+
+_RECIPE_UPDATE_SYSTEM = (
+    "You are a recipe modification assistant. "
+    "The user has a pending recipe awaiting confirmation and wants to change something before confirming.\n\n"
+    "Analyze the user message and return ONLY valid JSON, no markdown fences:\n"
+    '{"modified": false} — if the message is NOT a recipe modification, OR\n'
+    '{"modified": true, "price": <number or null>, "name": "<string or null>", "items": [<updated items array or null>]}'
+    " — if it IS a modification. "
+    "Use null for fields that did NOT change. "
+    "For items, use the same structure: "
+    '{"name": "<English ingredient name>", "quantity": <number>, "unit": "<g|ml|ea>", '
+    '"quantity_display": "<expression as written>", "reasoning": "<English explanation if vague, else null>"}. '
+    "Only include items array if at least one ingredient changed; otherwise use null."
+)
+
+_RECIPE_UPDATE_PROMPT = (
+    "Current pending recipe:\n{pending}\n\nUser message: {message}\n\n"
+    "Does this message modify the recipe? Return JSON as instructed."
+)
+
+
+def detect_recipe_update(pending: dict, user_message: str) -> Optional[dict]:
+    client = _get_client()
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1024,
+        system=_RECIPE_UPDATE_SYSTEM,
+        messages=[
+            {
+                "role": "user",
+                "content": _RECIPE_UPDATE_PROMPT.format(
+                    pending=json.dumps(pending, ensure_ascii=False),
+                    message=user_message,
+                ),
+            }
+        ],
+    )
+    raw = "".join(getattr(b, "text", "") for b in response.content).strip()
+    data = json.loads(strip_fences(raw))
+    return data if data.get("modified") else None
 
 
 _VISION_EXTRACTION_SYSTEM = (
