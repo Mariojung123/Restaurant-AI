@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restaurant AI Partner — Development Specification</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Figtree:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:            oklch(96.5% 0.009 75);
+      --surface:       oklch(99% 0.004 75);
+      --surface-sub:   oklch(92.5% 0.014 75);
+      --text:          oklch(18% 0.018 75);
+      --text-muted:    oklch(50% 0.014 75);
+      --accent:        oklch(62% 0.19 52);
+      --accent-light:  oklch(93% 0.055 72);
+      --green:         oklch(48% 0.13 155);
+      --green-light:   oklch(93% 0.045 150);
+      --border:        oklch(87% 0.013 75);
+      --num:           oklch(89% 0.018 75);
+
+      --font-head: 'Bricolage Grotesque', sans-serif;
+      --font-body: 'Figtree', sans-serif;
+
+      --space-xs:  4px;
+      --space-sm:  8px;
+      --space-md:  16px;
+      --space-lg:  24px;
+      --space-xl:  32px;
+      --space-2xl: 48px;
+      --space-3xl: 64px;
+      --space-4xl: 96px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      background: var(--text);
+      color: var(--bg);
+      padding: var(--space-4xl) var(--space-3xl);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 70% 50%, oklch(62% 0.19 52 / 0.25) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-inner { max-width: 960px; margin: 0 auto; position: relative; }
+    .hero-label {
+      font-family: var(--font-body);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: oklch(62% 0.19 52);
+      margin-bottom: var(--space-lg);
+    }
+    .hero h1 {
+      font-family: var(--font-head);
+      font-size: clamp(36px, 6vw, 72px);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: var(--space-xl);
+      color: oklch(97% 0.009 75);
+    }
+    .hero h1 span { color: oklch(62% 0.19 52); }
+    .hero-tagline {
+      font-size: clamp(16px, 2vw, 20px);
+      font-weight: 300;
+      color: oklch(78% 0.012 75);
+      max-width: 640px;
+      line-height: 1.6;
+      margin-bottom: var(--space-2xl);
+    }
+    .hero-meta { display: flex; gap: var(--space-xl); flex-wrap: wrap; }
+    .hero-meta-item { display: flex; flex-direction: column; gap: var(--space-xs); }
+    .hero-meta-item .label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: oklch(55% 0.014 75);
+    }
+    .hero-meta-item .value {
+      font-family: var(--font-head); font-size: 15px;
+      font-weight: 600; color: oklch(88% 0.012 75);
+    }
+
+    /* ── LAYOUT ── */
+    .layout {
+      max-width: 960px; margin: 0 auto;
+      padding: var(--space-4xl) var(--space-xl);
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: var(--space-4xl);
+      align-items: start;
+    }
+
+    /* ── SIDEBAR NAV ── */
+    .sidebar { position: sticky; top: var(--space-xl); }
+    .sidebar-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--text-muted); margin-bottom: var(--space-md);
+    }
+    .sidebar nav { display: flex; flex-direction: column; gap: var(--space-xs); }
+    .sidebar nav a {
+      font-size: 13px; color: var(--text-muted); text-decoration: none;
+      padding: var(--space-xs) 0; transition: color 0.15s;
+      display: flex; align-items: center; gap: var(--space-sm);
+    }
+    .sidebar nav a::before {
+      content: attr(data-num); font-family: var(--font-head);
+      font-size: 11px; font-weight: 700; color: var(--border);
+      width: 20px; flex-shrink: 0;
+    }
+    .sidebar nav a:hover { color: var(--accent); }
+
+    /* ── CONTENT ── */
+    .content { min-width: 0; }
+
+    /* ── SECTION ── */
+    .section { margin-bottom: var(--space-4xl); scroll-margin-top: var(--space-xl); }
+    .section-header {
+      display: flex; align-items: flex-start;
+      gap: var(--space-lg); margin-bottom: var(--space-xl);
+    }
+    .section-num {
+      font-family: var(--font-head); font-size: 64px; font-weight: 800;
+      line-height: 1; color: var(--num); letter-spacing: -0.04em;
+      flex-shrink: 0; margin-top: -8px;
+    }
+    .section-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: var(--space-xs);
+    }
+    .section-title {
+      font-family: var(--font-head); font-size: clamp(22px, 3vw, 30px);
+      font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: var(--text);
+    }
+    hr.divider { border: none; border-top: 1px solid var(--border); margin: var(--space-2xl) 0; }
+
+    /* ── PROBLEM GRID ── */
+    .problem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); margin: var(--space-xl) 0; }
+    .problem-item { background: var(--surface-sub); padding: var(--space-lg); border-radius: 8px; }
+    .problem-item .emoji { font-size: 22px; margin-bottom: var(--space-sm); }
+    .problem-item p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+    .problem-item strong { display: block; font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: var(--space-xs); }
+
+    /* ── QUOTE BLOCK ── */
+    .quote-block { background: var(--accent-light); padding: var(--space-xl) var(--space-2xl); border-radius: 10px; margin: var(--space-xl) 0; }
+    .quote-block p {
+      font-family: var(--font-head); font-size: clamp(17px, 2.2vw, 22px);
+      font-weight: 600; color: var(--text); line-height: 1.4; letter-spacing: -0.01em;
+    }
+
+    /* ── STAT ROW ── */
+    .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); margin: var(--space-xl) 0; }
+    .stat-item { text-align: center; padding: var(--space-lg); background: var(--surface); border-radius: 8px; border: 1px solid var(--border); }
+    .stat-num { font-family: var(--font-head); font-size: 36px; font-weight: 800; color: var(--accent); letter-spacing: -0.03em; line-height: 1; margin-bottom: var(--space-xs); }
+    .stat-label { font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+
+    /* ── FLOW ── */
+    .flow { display: flex; flex-direction: column; gap: 0; margin: var(--space-xl) 0; }
+    .flow-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--space-md); }
+    .flow-box { padding: var(--space-md) var(--space-lg); border-radius: 8px; font-size: 14px; font-weight: 500; text-align: center; line-height: 1.4; }
+    .flow-box.input { background: var(--green-light); color: var(--green); }
+    .flow-box.process { background: var(--accent-light); color: var(--accent); }
+    .flow-box.output { background: oklch(93% 0.04 260); color: oklch(42% 0.13 260); }
+    .flow-arrow { font-size: 22px; color: var(--border); text-align: center; }
+    .flow-center-box { background: var(--surface-sub); border-radius: 10px; padding: var(--space-lg); margin: var(--space-sm) 0; font-size: 14px; color: var(--text-muted); text-align: center; }
+    .flow-center-box strong { display: block; font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: var(--space-xs); }
+
+    /* ── ARCHITECTURE LAYERS ── */
+    .arch-stack { display: flex; flex-direction: column; gap: var(--space-sm); margin: var(--space-xl) 0; }
+    .arch-row { display: grid; grid-template-columns: 140px 1fr; gap: var(--space-md); align-items: start; }
+    .arch-layer-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--text-muted); padding-top: var(--space-md);
+    }
+    .arch-modules { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+    .arch-module {
+      font-family: 'Courier New', monospace; font-size: 12px; font-weight: 600;
+      padding: var(--space-sm) var(--space-md); border-radius: 6px;
+    }
+    .arch-module.router { background: var(--accent-light); color: var(--accent); }
+    .arch-module.service { background: var(--green-light); color: var(--green); }
+    .arch-module.model { background: oklch(93% 0.04 260); color: oklch(42% 0.13 260); }
+    .arch-module.frontend { background: var(--surface-sub); color: var(--text-muted); border: 1px solid var(--border); }
+    .arch-arrow-row { display: flex; align-items: center; padding-left: 156px; color: var(--border); font-size: 18px; margin: var(--space-xs) 0; }
+
+    /* ── FEATURE CARDS ── */
+    .feature-list { display: flex; flex-direction: column; gap: var(--space-md); }
+    .feature-card { display: grid; grid-template-columns: 48px 1fr; gap: var(--space-lg); padding: var(--space-xl); background: var(--surface); border-radius: 10px; border: 1px solid var(--border); }
+    .feature-num { font-family: var(--font-head); font-size: 28px; font-weight: 800; color: var(--num); letter-spacing: -0.03em; line-height: 1; }
+    .feature-body h3 { font-family: var(--font-head); font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: var(--space-sm); letter-spacing: -0.01em; }
+    .feature-body p { font-size: 14px; color: var(--text-muted); line-height: 1.65; margin-bottom: var(--space-sm); }
+    .feature-tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 10px; border-radius: 100px; background: var(--accent-light); color: var(--accent); }
+    .feature-tag.green { background: var(--green-light); color: var(--green); }
+    .feature-steps { display: flex; gap: var(--space-sm); flex-wrap: wrap; margin: var(--space-sm) 0; }
+    .feature-step {
+      font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 100px;
+      background: var(--surface-sub); color: var(--text-muted); border: 1px solid var(--border);
+    }
+    .feature-step::before { content: attr(data-n) " "; font-weight: 700; color: var(--accent); }
+
+    /* ── TECH STACK ── */
+    .stack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
+    .stack-item { padding: var(--space-lg); background: var(--surface); border-radius: 8px; border: 1px solid var(--border); }
+    .stack-item .layer { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); margin-bottom: var(--space-sm); }
+    .stack-item .tech { font-family: var(--font-head); font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: var(--space-xs); letter-spacing: -0.01em; }
+    .stack-item .reason { font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+
+    /* ── DB SCHEMA ── */
+    .schema-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+    .schema-row { background: var(--surface); border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
+    .schema-header { display: grid; grid-template-columns: 200px 1fr; gap: var(--space-lg); padding: var(--space-md) var(--space-lg); align-items: center; }
+    .schema-name { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; color: var(--accent); }
+    .schema-desc { font-size: 14px; color: var(--text-muted); }
+    .schema-fields { padding: var(--space-sm) var(--space-lg) var(--space-md); border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+    .schema-field {
+      font-family: 'Courier New', monospace; font-size: 11px; padding: 2px 8px;
+      border-radius: 4px; background: var(--surface-sub); color: var(--text-muted);
+    }
+    .schema-field.key { background: var(--accent-light); color: var(--accent); }
+    .schema-field.fk { background: var(--green-light); color: var(--green); }
+
+    /* ── API TABLE ── */
+    .api-group-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--text-muted); margin-top: var(--space-xl); margin-bottom: var(--space-sm);
+      padding-left: var(--space-sm);
+    }
+    .api-group-label:first-child { margin-top: 0; }
+    .api-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+    .api-row { display: grid; grid-template-columns: 70px 1fr auto; gap: var(--space-md); padding: var(--space-md) var(--space-lg); background: var(--surface); border-radius: 6px; border: 1px solid var(--border); align-items: center; }
+    .api-method { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-align: center; }
+    .api-method.get    { background: var(--green-light); color: var(--green); }
+    .api-method.post   { background: var(--accent-light); color: var(--accent); }
+    .api-method.put    { background: oklch(93% 0.05 65); color: oklch(42% 0.14 65); }
+    .api-method.delete { background: oklch(93% 0.04 15); color: oklch(42% 0.15 15); }
+    .api-path { font-family: 'Courier New', monospace; font-size: 13px; color: var(--text); }
+    .api-desc { font-size: 13px; color: var(--text-muted); text-align: right; }
+
+    /* ── COMPETITOR TABLE ── */
+    .comp-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .comp-table th { font-family: var(--font-head); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); text-align: left; padding: var(--space-sm) var(--space-md); border-bottom: 2px solid var(--border); }
+    .comp-table td { padding: var(--space-md); border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+    .comp-table td:first-child { font-weight: 600; font-family: var(--font-head); }
+    .comp-table tr:last-child td { border-bottom: none; }
+    .comp-table tr.ours td { background: var(--accent-light); }
+    .comp-table tr.ours td:first-child { color: var(--accent); }
+
+    /* ── PORTFOLIO ── */
+    .portfolio-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-md); }
+    .portfolio-item { padding: var(--space-xl) var(--space-lg); background: var(--surface-sub); border-radius: 10px; text-align: center; }
+    .portfolio-item .icon { font-size: 32px; margin-bottom: var(--space-md); }
+    .portfolio-item h4 { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: var(--space-sm); }
+    .portfolio-item p { font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+
+    /* ── TEXT ── */
+    p { margin-bottom: var(--space-md); }
+    p:last-child { margin-bottom: 0; }
+    ul { list-style: none; display: flex; flex-direction: column; gap: var(--space-sm); margin: var(--space-md) 0; }
+    ul li { font-size: 14px; color: var(--text-muted); padding-left: var(--space-lg); position: relative; line-height: 1.6; }
+    ul li::before { content: '—'; position: absolute; left: 0; color: var(--border); font-weight: 700; }
+    ul li strong { color: var(--text); font-weight: 600; }
+
+    /* ── FOOTER ── */
+    .footer { background: var(--text); color: oklch(60% 0.012 75); padding: var(--space-2xl) var(--space-xl); text-align: center; font-size: 13px; }
+    .footer strong { color: oklch(88% 0.012 75); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; padding: var(--space-xl) var(--space-md); gap: var(--space-2xl); }
+      .sidebar { display: none; }
+      .hero { padding: var(--space-2xl) var(--space-lg); }
+      .problem-grid, .stack-grid, .portfolio-grid { grid-template-columns: 1fr; }
+      .stat-row { grid-template-columns: 1fr 1fr; }
+      .api-row { grid-template-columns: 70px 1fr; }
+      .api-desc { display: none; }
+      .schema-header { grid-template-columns: 1fr; gap: var(--space-xs); }
+      .arch-row { grid-template-columns: 1fr; }
+      .arch-arrow-row { padding-left: var(--space-md); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-inner">
+    <p class="hero-label">Development Specification · 2026 · MVP Complete</p>
+    <h1>Restaurant<br><span>AI Partner</span></h1>
+    <p class="hero-tagline">Two photos — a delivery invoice and an end-of-day receipt — and the AI predicts when each ingredient runs out. A conversational operations partner built for small restaurant owners in Canada.</p>
+    <div class="hero-meta">
+      <div class="hero-meta-item">
+        <span class="label">Type</span>
+        <span class="value">PWA Web App</span>
+      </div>
+      <div class="hero-meta-item">
+        <span class="label">Purpose</span>
+        <span class="value">Portfolio Project</span>
+      </div>
+      <div class="hero-meta-item">
+        <span class="label">Core Tech</span>
+        <span class="value">Claude API (Text + Vision)</span>
+      </div>
+      <div class="hero-meta-item">
+        <span class="label">Target Market</span>
+        <span class="value">Canada — Independent Restaurants</span>
+      </div>
+      <div class="hero-meta-item">
+        <span class="label">Build Status</span>
+        <span class="value">All 5 MVP Features Shipped</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <p class="sidebar-title">Contents</p>
+    <nav>
+      <a href="#motivation" data-num="01">Motivation</a>
+      <a href="#concept" data-num="02">Core Concept</a>
+      <a href="#target" data-num="03">Target Users</a>
+      <a href="#flow" data-num="04">Data Flow</a>
+      <a href="#architecture" data-num="05">Architecture</a>
+      <a href="#features" data-num="06">MVP Features</a>
+      <a href="#stack" data-num="07">Tech Stack</a>
+      <a href="#schema" data-num="08">DB Schema</a>
+      <a href="#api" data-num="09">API Reference</a>
+      <a href="#competition" data-num="10">Competition</a>
+      <a href="#portfolio" data-num="11">Portfolio Value</a>
+    </nav>
+  </aside>
+
+  <!-- CONTENT -->
+  <main class="content">
+
+    <!-- 01 MOTIVATION -->
+    <section class="section" id="motivation">
+      <div class="section-header">
+        <span class="section-num">01</span>
+        <div class="section-title-group">
+          <p class="section-label">Why We Build</p>
+          <h2 class="section-title">Motivation</h2>
+        </div>
+      </div>
+
+      <p>Built from firsthand experience running a restaurant. The pain points below are real, observed daily by owners who manage inventory manually.</p>
+
+      <div class="problem-grid">
+        <div class="problem-item">
+          <div class="emoji">👁️</div>
+          <strong>"There / Not There" Thinking</strong>
+          <p>Owners scan the fridge and move on if something is present — even if it's half-gone. The blind spot is "about to run out."</p>
+        </div>
+        <div class="problem-item">
+          <div class="emoji">😓</div>
+          <strong>Counting After Closing Is Unrealistic</strong>
+          <p>After a full shift, no one wants to count every ingredient. End-of-day inventory checks are consistently skipped or rushed.</p>
+        </div>
+        <div class="problem-item">
+          <div class="emoji">📋</div>
+          <strong>Manual Delivery Entry</strong>
+          <p>Writing down delivery items by hand and transferring to spreadsheets leads to typos, lost records, and missed items.</p>
+        </div>
+        <div class="problem-item">
+          <div class="emoji">🎲</div>
+          <strong>Ordering by Gut Feel</strong>
+          <p>"Looks like about 3 days of chicken left" — intuition-based ordering leads to constant over-buying or running out.</p>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-item">
+          <div class="stat-num">44%</div>
+          <div class="stat-label">of Canadian restaurants<br>at or below breakeven</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">75%</div>
+          <div class="stat-label">annual staff<br>turnover rate</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">4,000</div>
+          <div class="stat-label">restaurants projected<br>to close in 2026</div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 02 CORE CONCEPT -->
+    <section class="section" id="concept">
+      <div class="section-header">
+        <span class="section-num">02</span>
+        <div class="section-title-group">
+          <p class="section-label">Core Concept</p>
+          <h2 class="section-title">The Idea</h2>
+        </div>
+      </div>
+
+      <div class="quote-block">
+        <p>"Snap a photo of the delivery invoice and the closing receipt — the AI tells you when you'll run out of everything."</p>
+      </div>
+
+      <p>A conversational AI that feels like messaging a knowledgeable manager. Owners ask questions in plain language and get data-driven answers. Number of manual data entries per day: <strong>zero</strong>.</p>
+
+      <ul>
+        <li><strong>How humans see inventory</strong> — present / absent</li>
+        <li><strong>How the AI sees inventory</strong> — present / running low / absent</li>
+        <li><strong>Natural language units</strong> — "half a bell pepper", "a tablespoon of garlic" — understood as-is</li>
+      </ul>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 03 TARGET USERS -->
+    <section class="section" id="target">
+      <div class="section-header">
+        <span class="section-num">03</span>
+        <div class="section-title-group">
+          <p class="section-label">Target Users</p>
+          <h2 class="section-title">Who It's For</h2>
+        </div>
+      </div>
+
+      <ul>
+        <li><strong>Small independent restaurants in Canada</strong> — under 50 staff, no franchise systems</li>
+        <li><strong>Low-tech owners</strong> — basic spreadsheet level, limited app experience</li>
+        <li><strong>Immigrant-owned restaurants</strong> — multilingual expansion potential (Korean, Chinese, English)</li>
+      </ul>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 04 DATA FLOW -->
+    <section class="section" id="flow">
+      <div class="section-header">
+        <span class="section-num">04</span>
+        <div class="section-title-group">
+          <p class="section-label">Data Flow</p>
+          <h2 class="section-title">How It Works</h2>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="flow-row">
+          <div class="flow-box input">📦 Delivery Invoice Photo<br><small>Claude Vision parsing</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box process">Stock DB Updated<br><small>ingredients table</small></div>
+        </div>
+        <div style="display:flex;justify-content:center;padding:8px 0;color:var(--border);font-size:20px;">↓</div>
+        <div class="flow-center-box">
+          <strong>Prediction Engine</strong>
+          current_stock ÷ (daily avg consumption × recipe usage per serving) = estimated depletion date · 14-day lookback window
+        </div>
+        <div style="display:flex;justify-content:center;padding:8px 0;color:var(--border);font-size:20px;">↑</div>
+        <div class="flow-row">
+          <div class="flow-box input">🧾 Closing Receipt Photo<br><small>Claude Vision parsing</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box process">Sales Logged<br><small>sales_logs table</small></div>
+        </div>
+        <div style="display:flex;justify-content:center;padding:8px 0;color:var(--border);font-size:20px;">↓</div>
+        <div class="flow-row" style="grid-template-columns:1fr;">
+          <div class="flow-box output" style="padding:var(--space-lg);">🔔 Dashboard Alert — "Chicken breast runs out tomorrow evening. Order 10 kg like last time?"</div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 05 ARCHITECTURE -->
+    <section class="section" id="architecture">
+      <div class="section-header">
+        <span class="section-num">05</span>
+        <div class="section-title-group">
+          <p class="section-label">System Design</p>
+          <h2 class="section-title">Architecture</h2>
+        </div>
+      </div>
+
+      <p>Strict three-layer separation enforced across the entire codebase. Every request flows through the same pipeline — no business logic in routers, no HTTP concerns in services.</p>
+
+      <div class="arch-stack">
+        <div class="arch-row">
+          <div class="arch-layer-label">Frontend</div>
+          <div class="arch-modules">
+            <span class="arch-module frontend">pages/Chat.jsx</span>
+            <span class="arch-module frontend">pages/Dashboard.jsx</span>
+            <span class="arch-module frontend">pages/Recipe.jsx</span>
+            <span class="arch-module frontend">pages/Invoice.jsx</span>
+            <span class="arch-module frontend">pages/Receipt.jsx</span>
+          </div>
+        </div>
+        <div class="arch-arrow-row">↓ fetch via api/ client modules</div>
+        <div class="arch-row">
+          <div class="arch-layer-label">Routers</div>
+          <div class="arch-modules">
+            <span class="arch-module router">chat.py</span>
+            <span class="arch-module router">recipe.py</span>
+            <span class="arch-module router">invoice.py</span>
+            <span class="arch-module router">receipt.py</span>
+            <span class="arch-module router">inventory.py</span>
+            <span class="arch-module router">vision.py</span>
+          </div>
+        </div>
+        <div class="arch-arrow-row">↓ validate input → call services → return HTTP response</div>
+        <div class="arch-row">
+          <div class="arch-layer-label">Services</div>
+          <div class="arch-modules">
+            <span class="arch-module service">claude.py</span>
+            <span class="arch-module service">chat_context.py</span>
+            <span class="arch-module service">pending_recipe.py</span>
+            <span class="arch-module service">recipe_svc.py</span>
+            <span class="arch-module service">invoice.py</span>
+            <span class="arch-module service">receipt.py</span>
+            <span class="arch-module service">vision_common.py</span>
+            <span class="arch-module service">prediction.py</span>
+            <span class="arch-module service">fuzzy_match.py</span>
+            <span class="arch-module service">ingredient.py</span>
+            <span class="arch-module service">chat_history.py</span>
+          </div>
+        </div>
+        <div class="arch-arrow-row">↓ business logic · Claude API calls · DB writes</div>
+        <div class="arch-row">
+          <div class="arch-layer-label">Models</div>
+          <div class="arch-modules">
+            <span class="arch-module model">database.py</span>
+          </div>
+        </div>
+      </div>
+
+      <ul>
+        <li><strong>Chat pipeline</strong> — chat_context.py builds a DB snapshot for the prompt → claude.py calls Claude API → pending_recipe.py manages two-step recipe confirmation state → chat_history.py persists turns</li>
+        <li><strong>Vision pipeline</strong> — vision_common.py encodes images → shared Claude Vision call → invoice.py or receipt.py parses response and writes DB</li>
+        <li><strong>Fuzzy matching</strong> — fuzzy_match.py normalizes extracted ingredient names against DB entries; used by both invoice and receipt parsers</li>
+        <li><strong>Prediction pipeline</strong> — prediction.py joins sales_logs × recipe_ingredients to compute daily consumption, then projects depletion dates with a 14-day lookback</li>
+      </ul>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 06 MVP FEATURES -->
+    <section class="section" id="features">
+      <div class="section-header">
+        <span class="section-num">06</span>
+        <div class="section-title-group">
+          <p class="section-label">MVP Features</p>
+          <h2 class="section-title">What Gets Built</h2>
+        </div>
+      </div>
+
+      <div class="feature-list">
+        <div class="feature-card">
+          <div class="feature-num">01</div>
+          <div class="feature-body">
+            <h3>Natural Language Chat Q&A</h3>
+            <p>Claude answers operational questions in plain English based on the restaurant's actual data. "What sold best this week?", "When does the chicken breast run out?" — all handled conversationally. Multi-turn context preserved per session. Recipe registration can also be triggered mid-chat — owner can modify details before final confirmation without restarting the flow.</p>
+            <span class="feature-tag">Claude Text API</span>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-num">02</div>
+          <div class="feature-body">
+            <h3>Recipe Registration — Conversational + Structured Picker</h3>
+            <p>Owner says "add chicken salad" → Claude proposes a standard recipe → owner reviews via a structured ingredient picker UI, editing quantities and units inline before confirming. Mid-flow corrections supported without restarting. Accepts natural units throughout: "half a bell pepper", "a splash of olive oil", "two cloves of garlic."</p>
+            <div class="feature-steps">
+              <span class="feature-step" data-n="①">Chat input / natural language</span>
+              <span class="feature-step" data-n="②">Claude proposes recipe</span>
+              <span class="feature-step" data-n="③">Structured ingredient picker</span>
+              <span class="feature-step" data-n="④">Owner confirms → DB saved</span>
+            </div>
+            <span class="feature-tag">Claude Text API</span>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-num">03</div>
+          <div class="feature-body">
+            <h3>Delivery Invoice → Auto Stock Update</h3>
+            <p>Upload one photo of the delivery invoice → Claude Vision parses items and quantities → preview screen shows extracted data for review → one-tap confirm updates stock. Fuzzy matching resolves name variations (e.g., "chicken breast (bone-in)" → existing "Chicken Breast" entry). On parse failure, the system clearly identifies which items it couldn't read.</p>
+            <div class="feature-steps">
+              <span class="feature-step" data-n="①">Photo upload</span>
+              <span class="feature-step" data-n="②">Claude Vision parse</span>
+              <span class="feature-step" data-n="③">Preview &amp; review</span>
+              <span class="feature-step" data-n="④">Confirm → stock updated</span>
+            </div>
+            <span class="feature-tag green">Claude Vision API</span>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-num">04</div>
+          <div class="feature-body">
+            <h3>Closing Receipt → Auto Sales Log</h3>
+            <p>Upload a POS daily report or closing receipt photo → Claude Vision extracts per-item sales counts → preview screen shows parsed results → confirm to log. No manual counting required at end of shift. Fuzzy matching links extracted dish names to registered recipes. Unit conversion (kg/g, L/mL) applied before stock deduction.</p>
+            <div class="feature-steps">
+              <span class="feature-step" data-n="①">Photo upload</span>
+              <span class="feature-step" data-n="②">Claude Vision parse</span>
+              <span class="feature-step" data-n="③">Preview &amp; review</span>
+              <span class="feature-step" data-n="④">Confirm → sales logged</span>
+            </div>
+            <span class="feature-tag green">Claude Vision API</span>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-num">05</div>
+          <div class="feature-body">
+            <h3>Inventory Depletion Prediction Alert</h3>
+            <p>Combines current stock + 14-day sales history + recipe ingredient consumption to calculate when each item will run out. Dashboard shows depletion date, daily consumption rate, and reorder threshold alert. Proactive, not reactive: "chicken breast runs out tomorrow evening" before it happens. Per-ingredient forecast also available.</p>
+            <span class="feature-tag">Prediction Engine</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 07 TECH STACK -->
+    <section class="section" id="stack">
+      <div class="section-header">
+        <span class="section-num">07</span>
+        <div class="section-title-group">
+          <p class="section-label">Tech Stack</p>
+          <h2 class="section-title">Technology Choices</h2>
+        </div>
+      </div>
+
+      <div class="stack-grid">
+        <div class="stack-item">
+          <div class="layer">Frontend</div>
+          <div class="tech">React + Vite + Tailwind</div>
+          <div class="reason">PWA-ready via vite-plugin-pwa. Installable on mobile without an app store.</div>
+        </div>
+        <div class="stack-item">
+          <div class="layer">Backend</div>
+          <div class="tech">FastAPI (Python)</div>
+          <div class="reason">Official Anthropic Python SDK. Rich image processing libraries. Native async support for concurrent Vision + chat calls.</div>
+        </div>
+        <div class="stack-item">
+          <div class="layer">Database</div>
+          <div class="tech">PostgreSQL + SQLAlchemy 2.0</div>
+          <div class="reason">Free PostgreSQL on Railway/Render. Clean ORM layer — future=True for 2.0 style. pool_pre_ping for connection health.</div>
+        </div>
+        <div class="stack-item">
+          <div class="layer">AI</div>
+          <div class="tech">Claude API (Sonnet 4.6)</div>
+          <div class="reason">Text + Vision in a single model. Natural language unit parsing, recipe suggestion, invoice and receipt OCR. Model selected per task complexity: Haiku for lookups, Sonnet for general use.</div>
+        </div>
+        <div class="stack-item">
+          <div class="layer">Deploy · Frontend</div>
+          <div class="tech">Vercel</div>
+          <div class="reason">Free tier for React/Vite. Auto-deploy from GitHub.</div>
+        </div>
+        <div class="stack-item">
+          <div class="layer">Deploy · Backend</div>
+          <div class="tech">Railway / Render</div>
+          <div class="reason">FastAPI + PostgreSQL on free tier. Simple environment variable management.</div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 08 DB SCHEMA -->
+    <section class="section" id="schema">
+      <div class="section-header">
+        <span class="section-num">08</span>
+        <div class="section-title-group">
+          <p class="section-label">Database</p>
+          <h2 class="section-title">DB Schema</h2>
+        </div>
+      </div>
+
+      <div class="schema-list">
+        <div class="schema-row">
+          <div class="schema-header">
+            <div class="schema-name">ingredients</div>
+            <div class="schema-desc">Raw ingredient catalog — stock level, reorder threshold, base unit</div>
+          </div>
+          <div class="schema-fields">
+            <span class="schema-field key">id PK</span>
+            <span class="schema-field">name</span>
+            <span class="schema-field">unit</span>
+            <span class="schema-field">current_stock</span>
+            <span class="schema-field">reorder_threshold</span>
+            <span class="schema-field">notes</span>
+            <span class="schema-field">created_at</span>
+            <span class="schema-field">updated_at</span>
+          </div>
+        </div>
+
+        <div class="schema-row">
+          <div class="schema-header">
+            <div class="schema-name">recipes</div>
+            <div class="schema-desc">Menu item catalog — name, description, price per serving</div>
+          </div>
+          <div class="schema-fields">
+            <span class="schema-field key">id PK</span>
+            <span class="schema-field">name</span>
+            <span class="schema-field">description</span>
+            <span class="schema-field">price</span>
+            <span class="schema-field">created_at</span>
+            <span class="schema-field">updated_at</span>
+          </div>
+        </div>
+
+        <div class="schema-row">
+          <div class="schema-header">
+            <div class="schema-name">recipe_ingredients</div>
+            <div class="schema-desc">Menu–ingredient join — quantity nullable for vague amounts ("a pinch of"), stores original natural language</div>
+          </div>
+          <div class="schema-fields">
+            <span class="schema-field key">id PK</span>
+            <span class="schema-field fk">recipe_id FK</span>
+            <span class="schema-field fk">ingredient_id FK</span>
+            <span class="schema-field">quantity nullable</span>
+            <span class="schema-field">unit</span>
+            <span class="schema-field">quantity_display</span>
+          </div>
+        </div>
+
+        <div class="schema-row">
+          <div class="schema-header">
+            <div class="schema-name">inventory_logs</div>
+            <div class="schema-desc">Stock in/out events — deliveries, purchases, manual adjustments; includes supplier and unit cost</div>
+          </div>
+          <div class="schema-fields">
+            <span class="schema-field key">id PK</span>
+            <span class="schema-field fk">ingredient_id FK</span>
+            <span class="schema-field">change_type</span>
+            <span class="schema-field">quantity</span>
+            <span class="schema-field">unit_cost nullable</span>
+            <span class="schema-field">supplier nullable</span>
+            <span class="schema-field">note nullable</span>
+            <span class="schema-field">occurred_at</span>
+          </div>
+        </div>
+
+        <div class="schema-row">
+          <div class="schema-header">
+            <div class="schema-name">sales_logs</div>
+            <div class="schema-desc">Per-sale records used by prediction service — recipe sold, quantity, total price, timestamp</div>
+          </div>
+          <div class="schema-fields">
+            <span class="schema-field key">id PK</span>
+            <span class="schema-field fk">recipe_id FK</span>
+            <span class="schema-field">quantity</span>
+            <span class="schema-field">total_price nullable</span>
+            <span class="schema-field">sold_at</span>
+          </div>
+        </div>
+
+        <div class="schema-row">
+          <div class="schema-header">
+            <div class="schema-name">chat_history</div>
+            <div class="schema-desc">Multi-turn conversation history — keyed by session_id for context-aware Claude responses</div>
+          </div>
+          <div class="schema-fields">
+            <span class="schema-field key">id PK</span>
+            <span class="schema-field">session_id</span>
+            <span class="schema-field">role user|assistant</span>
+            <span class="schema-field">content</span>
+            <span class="schema-field">created_at</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 09 API REFERENCE -->
+    <section class="section" id="api">
+      <div class="section-header">
+        <span class="section-num">09</span>
+        <div class="section-title-group">
+          <p class="section-label">API</p>
+          <h2 class="section-title">API Reference</h2>
+        </div>
+      </div>
+
+      <p class="api-group-label">Chat · /api/chat</p>
+      <div class="api-list">
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/chat/message</span>
+          <span class="api-desc">Send message, get Claude response</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method get">GET</span>
+          <span class="api-path">/api/chat/history/{session_id}</span>
+          <span class="api-desc">Fetch conversation history</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method delete">DELETE</span>
+          <span class="api-path">/api/chat/history/{session_id}</span>
+          <span class="api-desc">Clear conversation history</span>
+        </div>
+      </div>
+
+      <p class="api-group-label">Recipe · /api/recipe</p>
+      <div class="api-list">
+        <div class="api-row">
+          <span class="api-method get">GET</span>
+          <span class="api-path">/api/recipe/</span>
+          <span class="api-desc">List all recipes</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method get">GET</span>
+          <span class="api-path">/api/recipe/{recipe_id}</span>
+          <span class="api-desc">Recipe detail with ingredients</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/recipe/preview</span>
+          <span class="api-desc">Claude suggests recipe from NL input</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/recipe/confirm</span>
+          <span class="api-desc">Save previewed recipe after owner review</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/recipe/parse</span>
+          <span class="api-desc">Parse ingredient list from free text</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/recipe/</span>
+          <span class="api-desc">Register recipe directly (structured input)</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method put">PUT</span>
+          <span class="api-path">/api/recipe/{recipe_id}</span>
+          <span class="api-desc">Update recipe</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method delete">DELETE</span>
+          <span class="api-path">/api/recipe/{recipe_id}</span>
+          <span class="api-desc">Delete recipe</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/recipe/sales</span>
+          <span class="api-desc">Log sales for a recipe</span>
+        </div>
+      </div>
+
+      <p class="api-group-label">Invoice · /api/vision/invoice</p>
+      <div class="api-list">
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/vision/invoice/preview</span>
+          <span class="api-desc">Parse invoice photo, return preview</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/vision/invoice/confirm</span>
+          <span class="api-desc">Confirm preview → update stock</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/vision/invoice/</span>
+          <span class="api-desc">Parse + update in one step</span>
+        </div>
+      </div>
+
+      <p class="api-group-label">Receipt · /api/vision/receipt</p>
+      <div class="api-list">
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/vision/receipt/preview</span>
+          <span class="api-desc">Parse receipt photo, return preview</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/vision/receipt/confirm</span>
+          <span class="api-desc">Confirm preview → log sales</span>
+        </div>
+      </div>
+
+      <p class="api-group-label">Inventory · /api/inventory</p>
+      <div class="api-list">
+        <div class="api-row">
+          <span class="api-method get">GET</span>
+          <span class="api-path">/api/inventory/ingredients</span>
+          <span class="api-desc">List all ingredients with stock levels</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/inventory/logs</span>
+          <span class="api-desc">Manual stock adjustment log</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method get">GET</span>
+          <span class="api-path">/api/inventory/forecast</span>
+          <span class="api-desc">Depletion forecast for all ingredients</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method get">GET</span>
+          <span class="api-path">/api/inventory/forecast/{ingredient_id}</span>
+          <span class="api-desc">Forecast for a single ingredient</span>
+        </div>
+        <div class="api-row">
+          <span class="api-method get">GET</span>
+          <span class="api-path">/api/inventory/history/{ingredient_id}</span>
+          <span class="api-desc">Daily usage history (14-day window)</span>
+        </div>
+      </div>
+
+      <p class="api-group-label">Vision · /api/vision</p>
+      <div class="api-list">
+        <div class="api-row">
+          <span class="api-method post">POST</span>
+          <span class="api-path">/api/vision/parse</span>
+          <span class="api-desc">Generic image parse (raw Claude Vision)</span>
+        </div>
+      </div>
+
+      <p class="api-group-label">System</p>
+      <div class="api-list">
+        <div class="api-row">
+          <span class="api-method get">GET</span>
+          <span class="api-path">/health</span>
+          <span class="api-desc">Server health check</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 10 COMPETITION -->
+    <section class="section" id="competition">
+      <div class="section-header">
+        <span class="section-num">10</span>
+        <div class="section-title-group">
+          <p class="section-label">Market Analysis</p>
+          <h2 class="section-title">Competitive Landscape</h2>
+        </div>
+      </div>
+
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Natural Language Chat</th>
+            <th>Photo Parsing</th>
+            <th>Stock Prediction</th>
+            <th>Gap</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>MarketMan / WISK</td>
+            <td>❌</td>
+            <td>❌</td>
+            <td>△ Basic</td>
+            <td>Manual counting required; no conversational interface</td>
+          </tr>
+          <tr>
+            <td>Restoke</td>
+            <td>❌</td>
+            <td>✅ Invoices</td>
+            <td>❌</td>
+            <td>No chat; targets large operations, not independent owners</td>
+          </tr>
+          <tr>
+            <td>Square AI</td>
+            <td>△ Sales Q&A only</td>
+            <td>❌</td>
+            <td>❌</td>
+            <td>No inventory or ordering integration</td>
+          </tr>
+          <tr>
+            <td>Hostie / Slang</td>
+            <td>△ Customer-facing</td>
+            <td>❌</td>
+            <td>❌</td>
+            <td>Automates customer calls only; not operator tools</td>
+          </tr>
+          <tr class="ours">
+            <td>Restaurant AI Partner ★</td>
+            <td>✅ Operator-facing</td>
+            <td>✅ Invoice + Receipt</td>
+            <td>✅ Automatic</td>
+            <td>No existing product combines all three in one tool</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <hr class="divider">
+
+    <!-- 11 PORTFOLIO VALUE -->
+    <section class="section" id="portfolio">
+      <div class="section-header">
+        <span class="section-num">11</span>
+        <div class="section-title-group">
+          <p class="section-label">Portfolio Value</p>
+          <h2 class="section-title">Why This Project</h2>
+        </div>
+      </div>
+
+      <div class="portfolio-grid">
+        <div class="portfolio-item">
+          <div class="icon">🔍</div>
+          <h4>Problem Discovery</h4>
+          <p>Pain points derived from direct restaurant work experience — not assumed</p>
+        </div>
+        <div class="portfolio-item">
+          <div class="icon">🤖</div>
+          <h4>Claude API Depth</h4>
+          <p>Text, Vision, multi-turn context, and natural language unit parsing demonstrated in a single product</p>
+        </div>
+        <div class="portfolio-item">
+          <div class="icon">⚡</div>
+          <h4>Full-Stack Build</h4>
+          <p>FastAPI + React + PostgreSQL + PWA — complete end-to-end implementation with 25+ API endpoints</p>
+        </div>
+        <div class="portfolio-item">
+          <div class="icon">📊</div>
+          <h4>Market Research</h4>
+          <p>Canadian restaurant market analysis with validated competitive gap</p>
+        </div>
+        <div class="portfolio-item">
+          <div class="icon">🎯</div>
+          <h4>UX Thinking</h4>
+          <p>Two-step preview/confirm flows, structured ingredient pickers, and mid-flow editing — friction removed at every step</p>
+        </div>
+        <div class="portfolio-item">
+          <div class="icon">🔮</div>
+          <h4>Prediction Logic</h4>
+          <p>Inventory depletion algorithm combining 14-day sales patterns with recipe consumption data and reorder thresholds</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <p><strong>Restaurant AI Partner</strong> — Development Specification · 2026 · Portfolio Project built with Claude API</p>
+</footer>
+
+</body>
+</html>
