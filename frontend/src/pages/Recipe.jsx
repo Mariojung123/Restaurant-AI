@@ -1,7 +1,7 @@
 import { useEffect, useReducer } from 'react';
-import { listRecipes, previewRecipe, confirmRecipe } from '../api/recipe.js';
+import { listRecipes, getRecipe, previewRecipe, confirmRecipe, updateRecipe, deleteRecipe } from '../api/recipe.js';
 
-const STEP = { LIST: 'list', INPUT: 'input', REVIEW: 'review', DONE: 'done' };
+const STEP = { LIST: 'list', INPUT: 'input', REVIEW: 'review', DONE: 'done', DETAIL: 'detail', EDIT: 'edit' };
 const EMPTY_FORM = { name: '', price: '', description: '', ingredientText: '' };
 
 const initialState = {
@@ -10,6 +10,10 @@ const initialState = {
   recipes: [],
   listStatus: 'loading',
   listError: null,
+  // detail / edit
+  selectedRecipe: null,
+  detailStatus: 'idle',
+  deleteConfirm: false,
   // registration flow
   form: EMPTY_FORM,
   items: [],
@@ -30,9 +34,27 @@ function reducer(state, action) {
     case 'GO_TO_INPUT':
       return { ...state, step: STEP.INPUT, error: '' };
     case 'GO_TO_LIST':
-      return { ...state, step: STEP.LIST };
+      return { ...state, step: STEP.LIST, deleteConfirm: false };
     case 'GO_TO_INPUT_FROM_REVIEW':
       return { ...state, step: STEP.INPUT };
+    case 'GO_TO_DETAIL':
+      return { ...state, step: STEP.DETAIL, selectedRecipe: action.recipe, detailStatus: 'ready', deleteConfirm: false, error: '' };
+    case 'DETAIL_LOADING':
+      return { ...state, detailStatus: 'loading' };
+    case 'GO_TO_EDIT':
+      return {
+        ...state,
+        step: STEP.EDIT,
+        form: {
+          name: state.selectedRecipe.name,
+          price: String(state.selectedRecipe.price),
+          description: state.selectedRecipe.description ?? '',
+          ingredientText: '',
+        },
+        error: '',
+      };
+    case 'SET_DELETE_CONFIRM':
+      return { ...state, deleteConfirm: action.value };
     case 'FORM_UPDATE':
       return { ...state, form: { ...state.form, [action.field]: action.value } };
     case 'ANALYZE_START':
@@ -87,6 +109,7 @@ function Recipe() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const {
     step, recipes, listStatus, listError,
+    selectedRecipe, detailStatus, deleteConfirm,
     form, items, previewMeta, loading, error, result,
   } = state;
 
@@ -101,6 +124,40 @@ function Recipe() {
 
     return () => { cancelled = true; };
   }, [step]);
+
+  async function handleSelectRecipe(recipeId) {
+    dispatch({ type: 'DETAIL_LOADING' });
+    try {
+      const data = await getRecipe(recipeId);
+      dispatch({ type: 'GO_TO_DETAIL', recipe: data });
+    } catch (e) {
+      dispatch({ type: 'REQUEST_ERROR', error: e.message });
+    }
+  }
+
+  async function handleUpdate() {
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const updated = await updateRecipe(selectedRecipe.id, {
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        price: parseFloat(form.price) || 0,
+      });
+      dispatch({ type: 'GO_TO_DETAIL', recipe: { ...selectedRecipe, ...updated } });
+    } catch (e) {
+      dispatch({ type: 'REQUEST_ERROR', error: e.message });
+    }
+  }
+
+  async function handleDelete() {
+    dispatch({ type: 'SAVE_START' });
+    try {
+      await deleteRecipe(selectedRecipe.id);
+      dispatch({ type: 'GO_TO_LIST' });
+    } catch (e) {
+      dispatch({ type: 'REQUEST_ERROR', error: e.message });
+    }
+  }
 
   async function handleAnalyze() {
     dispatch({ type: 'ANALYZE_START' });
@@ -174,6 +231,159 @@ function Recipe() {
     return <span className="text-xs text-blue-600 font-medium">✨ New ingredient</span>;
   }
 
+  // ── Step DETAIL ───────────────────────────────────────────────────────────────
+  if (step === STEP.DETAIL) {
+    if (detailStatus === 'loading') {
+      return <p className="text-sm text-slate-500">Loading...</p>;
+    }
+    const r = selectedRecipe;
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <button onClick={() => dispatch({ type: 'GO_TO_LIST' })} className="text-slate-500 text-sm hover:text-slate-700">
+            ← Back
+          </button>
+          <h1 className="text-xl font-semibold flex-1">{r.name}</h1>
+          <button
+            onClick={() => dispatch({ type: 'GO_TO_EDIT' })}
+            className="text-sm border border-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-50"
+          >
+            Edit
+          </button>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-500">Price</span>
+            <span className="font-medium">${r.price.toFixed(2)}</span>
+          </div>
+          {r.description && (
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Description</span>
+              <span className="text-slate-700">{r.description}</span>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h2 className="text-sm font-medium text-slate-700 mb-2">Ingredients</h2>
+          {r.ingredients.length === 0 ? (
+            <p className="text-sm text-slate-500">No ingredients linked.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {r.ingredients.map((ing) => (
+                <li key={ing.link_id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm flex justify-between">
+                  <span className="font-medium">{ing.name}</span>
+                  <span className="text-slate-500">
+                    {ing.quantity_display ?? (ing.quantity != null ? `${ing.quantity}${ing.unit}` : ing.unit)}
+                    {ing.quantity != null && ing.quantity_display && (
+                      <span className="text-xs text-slate-400 ml-1">({ing.quantity}{ing.unit})</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {error && <p className="text-red-600 text-sm">{error}</p>}
+
+        {!deleteConfirm ? (
+          <button
+            onClick={() => dispatch({ type: 'SET_DELETE_CONFIRM', value: true })}
+            className="mt-2 text-sm text-red-500 hover:text-red-700 self-start"
+          >
+            Delete Recipe
+          </button>
+        ) : (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 flex items-center gap-3">
+            <p className="text-sm text-red-700 flex-1">Delete <strong>{r.name}</strong>? This cannot be undone.</p>
+            <button
+              onClick={() => dispatch({ type: 'SET_DELETE_CONFIRM', value: false })}
+              className="text-sm text-slate-600 border px-2 py-1 rounded"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={loading}
+              className="text-sm bg-red-600 text-white px-2 py-1 rounded disabled:opacity-40"
+            >
+              {loading ? '...' : 'Delete'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Step EDIT ─────────────────────────────────────────────────────────────────
+  if (step === STEP.EDIT) {
+    const canSave = form.name.trim();
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <button onClick={() => dispatch({ type: 'GO_TO_DETAIL', recipe: selectedRecipe })} className="text-slate-500 text-sm hover:text-slate-700">
+            ← Back
+          </button>
+          <h1 className="text-xl font-semibold">Edit Recipe</h1>
+        </div>
+
+        <div className="flex gap-3">
+          <div className="flex flex-col gap-1 flex-1">
+            <label className="text-xs text-slate-500">Recipe Name *</label>
+            <input
+              className="border rounded px-2 py-1.5 text-sm"
+              value={form.name}
+              onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'name', value: e.target.value })}
+            />
+          </div>
+          <div className="flex flex-col gap-1 w-28">
+            <label className="text-xs text-slate-500">Price ($)</label>
+            <input
+              className="border rounded px-2 py-1.5 text-sm"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.price}
+              onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'price', value: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-slate-500">Description (optional)</label>
+          <input
+            className="border rounded px-2 py-1.5 text-sm"
+            value={form.description}
+            onChange={(e) => dispatch({ type: 'FORM_UPDATE', field: 'description', value: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <p className="text-xs text-slate-500 mb-2">Ingredients (view only — to change ingredients, delete and re-add the recipe)</p>
+          <ul className="space-y-1">
+            {selectedRecipe.ingredients.map((ing) => (
+              <li key={ing.link_id} className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                {ing.name} — {ing.quantity_display ?? `${ing.quantity ?? ''}${ing.unit}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {error && <p className="text-red-600 text-sm">{error}</p>}
+
+        <button
+          onClick={handleUpdate}
+          disabled={!canSave || loading}
+          className="bg-brand text-white px-4 py-2 rounded-lg font-medium disabled:opacity-40"
+        >
+          {loading ? 'Saving...' : 'Save Changes'}
+        </button>
+      </div>
+    );
+  }
+
   // ── Step LIST ─────────────────────────────────────────────────────────────────
   if (step === STEP.LIST) {
     return (
@@ -203,11 +413,15 @@ function Recipe() {
           {recipes.map((recipe) => (
             <li
               key={recipe.id}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"
+              onClick={() => handleSelectRecipe(recipe.id)}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm cursor-pointer hover:bg-slate-50 transition-colors"
             >
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">{recipe.name}</p>
-                <span className="text-sm text-slate-600">${recipe.price.toFixed(2)}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-600">${recipe.price.toFixed(2)}</span>
+                  <span className="text-xs text-slate-400">›</span>
+                </div>
               </div>
               {recipe.description && (
                 <p className="mt-1 text-xs text-slate-500">{recipe.description}</p>

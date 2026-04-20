@@ -58,3 +58,61 @@ def save_recipe_core(
         "ingredients_linked": linked,
         "ingredients_created": created,
     }
+
+
+def get_recipe_detail(db: Session, recipe_id: int) -> dict | None:
+    """Return recipe + ingredients as a plain dict, or None if not found."""
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if recipe is None:
+        return None
+    ingredients = [
+        {
+            "link_id": link.id,
+            "ingredient_id": link.ingredient_id,
+            "name": link.ingredient.name,
+            "quantity": link.quantity,
+            "unit": link.unit,
+            "quantity_display": link.quantity_display,
+        }
+        for link in recipe.ingredient_links
+    ]
+    return {
+        "id": recipe.id,
+        "name": recipe.name,
+        "description": recipe.description,
+        "price": recipe.price,
+        "ingredients": ingredients,
+    }
+
+
+def update_recipe_fields(
+    db: Session, recipe_id: int, name: str, description: str | None, price: float
+) -> Recipe | None:
+    """Update name/description/price. Returns updated Recipe or None if not found.
+
+    Raises ValueError if name conflicts with another recipe.
+    """
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if recipe is None:
+        return None
+    duplicate = (
+        db.query(Recipe)
+        .filter(Recipe.name == name, Recipe.id != recipe_id)
+        .first()
+    )
+    if duplicate:
+        raise ValueError(f"Recipe name already exists: {name}")
+    recipe.name = name
+    recipe.description = description
+    recipe.price = price
+    db.flush()
+    return recipe
+
+
+def delete_recipe_by_id(db: Session, recipe_id: int) -> bool:
+    """Delete recipe. Returns False if not found."""
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if recipe is None:
+        return False
+    db.delete(recipe)
+    return True

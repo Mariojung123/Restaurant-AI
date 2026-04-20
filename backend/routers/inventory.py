@@ -13,7 +13,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, InventoryLog, get_db
-from services.prediction import forecast_all, forecast_ingredient
+from services.prediction import (
+    DEFAULT_LOOKBACK_DAYS,
+    daily_usage_history,
+    forecast_all,
+    forecast_ingredient,
+)
 
 
 router = APIRouter()
@@ -41,6 +46,13 @@ class InventoryLogIn(BaseModel):
     unit_cost: Optional[float] = None
     supplier: Optional[str] = None
     note: Optional[str] = None
+
+
+class DailyUsageOut(BaseModel):
+    """Per-day ingredient consumption returned by the history endpoint."""
+
+    date: str
+    amount: float
 
 
 class ForecastOut(BaseModel):
@@ -105,6 +117,21 @@ def get_forecast(db: Session = Depends(get_db)) -> list[ForecastOut]:
         )
         for f in forecasts
     ]
+
+
+@router.get("/history/{ingredient_id}", response_model=list[DailyUsageOut])
+def get_usage_history(
+    ingredient_id: int,
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    db: Session = Depends(get_db),
+) -> list[DailyUsageOut]:
+    """Return per-day consumption of a single ingredient over the lookback window."""
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if ingredient is None:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+
+    history = daily_usage_history(db, ingredient_id, lookback_days)
+    return [DailyUsageOut(date=h.date, amount=h.amount) for h in history]
 
 
 @router.get("/forecast/{ingredient_id}", response_model=ForecastOut)

@@ -23,3 +23,7 @@ def append_history(db: Session, session_id: str, messages: list, reply: str) -> 
     for msg in messages:
         db.add(ChatHistory(session_id=session_id, role=msg.role, content=msg.content))
     db.add(ChatHistory(session_id=session_id, role="assistant", content=reply))
+
+
+def delete_history(db: Session, session_id: str) -> None:
+    db.query(ChatHistory).filter(ChatHistory.session_id == session_id).delete()

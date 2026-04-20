@@ -20,6 +20,7 @@ from services.pending_recipe import (
 
 PARSED_AGLIO = {
     "name": "알리오 올리오",
+    "lang": "ko",
     "items": [
         {
             "name": "pasta",
@@ -86,7 +87,7 @@ def test_format_confirmation_message_structure():
     assert "pasta" in msg
     assert "마늘 한 큰술은 약 9g" in msg
     assert "소금 조금은 약 2g" in msg
-    assert "네 / 아니오" in msg
+    assert "네 / 아니오" in msg  # 한국어 레시피명 → 한국어 응답
 
 def test_format_confirmation_message_no_reasoning():
     parsed = {
@@ -142,7 +143,7 @@ def test_chat_recipe_register_creates_pending(client, db_session):
     reply = resp.json()["reply"]
     assert "알리오 올리오" in reply
     assert "마늘 한 큰술은 약 9g" in reply
-    assert "네 / 아니오" in reply
+    assert "네 / 아니오" in reply  # 한국어 레시피명 → 한국어 응답
 
     pending = _get_pending_recipe(db_session, "sess-cr-reg-01")
     assert pending is not None
@@ -172,7 +173,7 @@ def test_chat_recipe_confirm_saves_recipe(client, db_session):
 
     assert resp.status_code == 200
     reply = resp.json()["reply"]
-    assert "등록 완료" in reply
+    assert "has been added!" in reply  # 영어 레시피명 → 영어 응답
 
     recipe = db_session.query(Recipe).filter_by(name="cr-Aglio Olio-99").first()
     assert recipe is not None

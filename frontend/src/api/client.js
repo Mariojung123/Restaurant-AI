@@ -18,6 +18,20 @@ export function post(path, body) {
   }).then(_parse);
 }
 
+export function put(path, body) {
+  return fetch(`${BASE}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(_parse);
+}
+
+export function del(path) {
+  return fetch(`${BASE}${path}`, { method: 'DELETE' }).then((res) => {
+    if (!res.ok) return res.json().then((d) => { throw new Error(d.detail ?? res.statusText); });
+  });
+}
+
 export function postFile(path, file) {
   const fd = new FormData();
   fd.append('file', file);

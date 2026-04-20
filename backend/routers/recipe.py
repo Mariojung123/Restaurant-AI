@@ -21,7 +21,12 @@ from models.database import (
 )
 from services.claude import parse_recipe_ingredients
 from services.ingredient import create_ingredient, fuzzy_match_ingredient
-from services.recipe_svc import save_recipe_core
+from services.recipe_svc import (
+    delete_recipe_by_id,
+    get_recipe_detail,
+    save_recipe_core,
+    update_recipe_fields,
+)
 
 
 router = APIRouter()
@@ -126,6 +131,32 @@ class RecipeConfirmOut(BaseModel):
     ingredients_created: int
 
 
+class IngredientDetail(BaseModel):
+    link_id: int
+    ingredient_id: int
+    name: str
+    quantity: Optional[float]
+    unit: str
+    quantity_display: Optional[str]
+
+
+class RecipeDetailOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    price: float
+    ingredients: list[IngredientDetail]
+
+    class Config:
+        from_attributes = True
+
+
+class RecipeUpdateIn(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float = 0.0
+
+
 # ── endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/preview", response_model=RecipePreviewOut)
@@ -227,6 +258,34 @@ def parse_recipe(payload: ParseRequest) -> list[ParsedIngredient]:
 @router.get("/", response_model=list[RecipeOut])
 def list_recipes(db: Session = Depends(get_db)) -> list[RecipeOut]:
     return db.query(Recipe).order_by(Recipe.name).all()
+
+
+@router.get("/{recipe_id}", response_model=RecipeDetailOut)
+def get_recipe(recipe_id: int, db: Session = Depends(get_db)) -> RecipeDetailOut:
+    detail = get_recipe_detail(db, recipe_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return RecipeDetailOut(**detail)
+
+
+@router.put("/{recipe_id}", response_model=RecipeOut)
+def update_recipe(recipe_id: int, payload: RecipeUpdateIn, db: Session = Depends(get_db)) -> RecipeOut:
+    try:
+        recipe = update_recipe_fields(db, recipe_id, payload.name, payload.description, payload.price)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if recipe is None:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    db.commit()
+    db.refresh(recipe)
+    return recipe
+
+
+@router.delete("/{recipe_id}", status_code=204)
+def delete_recipe(recipe_id: int, db: Session = Depends(get_db)) -> None:
+    if not delete_recipe_by_id(db, recipe_id):
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    db.commit()
 
 
 @router.post("/", response_model=RecipeOut, status_code=201)
