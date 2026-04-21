@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, get_db
+from services.ingredient import delete_ingredient, update_ingredient
 from services.inventory_svc import record_inventory_change
 from services.prediction import (
     DEFAULT_LOOKBACK_DAYS,
@@ -46,6 +47,13 @@ class InventoryLogIn(BaseModel):
     unit_cost: Optional[float] = None
     supplier: Optional[str] = None
     note: Optional[str] = None
+
+
+class IngredientUpdate(BaseModel):
+    """Payload for updating an ingredient's stock and reorder threshold."""
+
+    current_stock: Optional[float] = None
+    reorder_threshold: Optional[float] = None
 
 
 class DailyUsageOut(BaseModel):
@@ -155,3 +163,39 @@ def get_forecast_for_ingredient(
         reorder_threshold=f.reorder_threshold,
         needs_reorder=f.needs_reorder,
     )
+
+
+@router.patch("/ingredients/{ingredient_id}", response_model=IngredientOut)
+def patch_ingredient(
+    ingredient_id: int,
+    payload: IngredientUpdate,
+    db: Session = Depends(get_db),
+) -> IngredientOut:
+    """Update current_stock and/or reorder_threshold for an ingredient."""
+    existing = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+
+    new_stock = payload.current_stock if payload.current_stock is not None else existing.current_stock
+    new_threshold = payload.reorder_threshold if payload.reorder_threshold is not None else existing.reorder_threshold
+
+    try:
+        updated = update_ingredient(db, ingredient_id, new_stock, new_threshold)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    db.commit()
+    db.refresh(updated)
+    return updated
+
+
+@router.delete("/ingredients/{ingredient_id}", status_code=204)
+def remove_ingredient(
+    ingredient_id: int,
+    db: Session = Depends(get_db),
+) -> None:
+    """Permanently remove an ingredient from the database."""
+    try:
+        delete_ingredient(db, ingredient_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    db.commit()

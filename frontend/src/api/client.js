@@ -26,6 +26,14 @@ export function put(path, body) {
   }).then(_parse);
 }
 
+export function patch(path, body) {
+  return fetch(`${BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(_parse);
+}
+
 export function del(path) {
   return fetch(`${BASE}${path}`, { method: 'DELETE' }).then((res) => {
     if (!res.ok) return res.json().then((d) => { throw new Error(d.detail ?? res.statusText); });
