@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from models.database import Ingredient, InventoryLog, get_db
+from models.database import Ingredient, get_db
+from services.inventory_svc import record_inventory_change
 from services.prediction import (
     DEFAULT_LOOKBACK_DAYS,
     daily_usage_history,
@@ -80,24 +81,21 @@ def create_inventory_log(
     db: Session = Depends(get_db),
 ) -> dict:
     """Record an inventory change and adjust the ingredient's current stock."""
-    ingredient = db.query(Ingredient).filter(Ingredient.id == payload.ingredient_id).first()
-    if ingredient is None:
-        raise HTTPException(status_code=404, detail="Ingredient not found")
-
-    log = InventoryLog(
-        ingredient_id=payload.ingredient_id,
-        change_type=payload.change_type,
-        quantity=payload.quantity,
-        unit_cost=payload.unit_cost,
-        supplier=payload.supplier,
-        note=payload.note,
-    )
-    ingredient.current_stock += payload.quantity
-
-    db.add(log)
+    try:
+        log, current_stock = record_inventory_change(
+            db,
+            ingredient_id=payload.ingredient_id,
+            change_type=payload.change_type,
+            quantity=payload.quantity,
+            unit_cost=payload.unit_cost,
+            supplier=payload.supplier,
+            note=payload.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     db.commit()
     db.refresh(log)
-    return {"id": log.id, "current_stock": ingredient.current_stock}
+    return {"id": log.id, "current_stock": current_stock}
 
 
 @router.get("/forecast", response_model=list[ForecastOut])

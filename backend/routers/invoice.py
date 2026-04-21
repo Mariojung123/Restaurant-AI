@@ -6,9 +6,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from models.database import InventoryLog, get_db
-from services.constants import AUTO_INVOICE_NOTE
-from services.invoice import fuzzy_match_ingredient, process_invoice_items
+from models.database import get_db
+from services.invoice import fuzzy_match_ingredient, is_duplicate_invoice, process_invoice_items
 from services.vision_common import call_vision_api, parse_vision_json, read_upload_file
 
 router = APIRouter()
@@ -120,17 +119,10 @@ async def preview_invoice(
     raw_text = call_vision_api(raw_bytes, file.content_type, _INVOICE_EXTRACTION_PROMPT)
     parsed = _parse_invoice_or_422(raw_text)
 
-    duplicate_warning = False
-    if parsed.supplier_name and parsed.invoice_date:
-        duplicate_warning = (
-            db.query(InventoryLog)
-            .filter(
-                InventoryLog.supplier == parsed.supplier_name,
-                    InventoryLog.note == AUTO_INVOICE_NOTE,
-            )
-            .first()
-            is not None
-        )
+    duplicate_warning = bool(
+        parsed.supplier_name and parsed.invoice_date
+        and is_duplicate_invoice(db, parsed.supplier_name)
+    )
 
     preview_items = []
     for item in parsed.items:

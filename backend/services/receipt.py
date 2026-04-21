@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -6,9 +7,32 @@ from models.database import Ingredient, Recipe, RecipeIngredient, SalesLog
 from services.fuzzy_match import fuzzy_match
 from services.unit_convert import convert_quantity
 
+logger = logging.getLogger(__name__)
+
 
 def fuzzy_match_recipe(db: Session, name: str) -> tuple:
     return fuzzy_match(db.query(Recipe).all(), name)
+
+
+def is_duplicate_sale_date(db: Session, sale_date_str: str) -> bool:
+    """Return True if any SalesLog already exists on the given date (YYYY-MM-DD).
+
+    Returns False on invalid date format.
+    """
+    try:
+        sale_dt = datetime.strptime(sale_date_str, "%Y-%m-%d")
+    except ValueError:
+        logger.warning("Invalid sale_date format '%s', skipping duplicate check", sale_date_str)
+        return False
+    return (
+        db.query(SalesLog)
+        .filter(
+            SalesLog.sold_at >= sale_dt.replace(hour=0, minute=0, second=0),
+            SalesLog.sold_at < sale_dt.replace(hour=23, minute=59, second=59),
+        )
+        .first()
+        is not None
+    )
 
 
 def process_receipt_items(

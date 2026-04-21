@@ -1,17 +1,13 @@
 """Receipt vision endpoints — preview and confirm sales receipt images."""
 
-import logging
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
-
-from models.database import SalesLog, get_db
-from services.receipt import fuzzy_match_recipe, process_receipt_items
+from models.database import get_db
+from services.receipt import fuzzy_match_recipe, is_duplicate_sale_date, process_receipt_items
 from services.vision_common import call_vision_api, parse_vision_json, read_upload_file
 
 router = APIRouter()
@@ -117,21 +113,9 @@ async def preview_receipt(
     raw_text = call_vision_api(raw_bytes, file.content_type, _RECEIPT_EXTRACTION_PROMPT)
     parsed = _parse_receipt_or_422(raw_text)
 
-    duplicate_warning = False
-    if parsed.sale_date:
-        try:
-            sale_dt = datetime.strptime(parsed.sale_date, "%Y-%m-%d")
-            duplicate_warning = (
-                db.query(SalesLog)
-                .filter(
-                    SalesLog.sold_at >= sale_dt.replace(hour=0, minute=0, second=0),
-                    SalesLog.sold_at < sale_dt.replace(hour=23, minute=59, second=59),
-                )
-                .first()
-                is not None
-            )
-        except ValueError:
-            logger.warning("Invalid sale_date format '%s', skipping duplicate check", parsed.sale_date)
+    duplicate_warning = bool(
+        parsed.sale_date and is_duplicate_sale_date(db, parsed.sale_date)
+    )
 
     preview_items = []
     for item in parsed.items:

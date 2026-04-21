@@ -9,6 +9,19 @@ from services.unit_convert import convert_quantity
 from services.ingredient import fuzzy_match_ingredient  # noqa: F401
 
 
+def is_duplicate_invoice(db: Session, supplier_name: str) -> bool:
+    """Return True if any InventoryLog already exists for this supplier."""
+    return (
+        db.query(InventoryLog)
+        .filter(
+            InventoryLog.supplier == supplier_name,
+            InventoryLog.note == AUTO_INVOICE_NOTE,
+        )
+        .first()
+        is not None
+    )
+
+
 def _create_log(
     db: Session,
     ingredient: Ingredient,
