@@ -116,7 +116,7 @@ def get_recipe_detail(db: Session, recipe_id: int) -> dict | None:
 def replace_recipe_ingredients(db: Session, recipe_id: int, items: list[dict]) -> None:
     db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe_id).delete()
     for item in items:
-        ingredient = db.query(Ingredient).filter(Ingredient.id == item["ingredient_id"]).first()
+        ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == item["ingredient_id"]).first()  # noqa: E712
         if ingredient is None:
             raise ValueError(f"Ingredient not found: {item['ingredient_id']}")
         db.add(RecipeIngredient(
@@ -174,7 +174,7 @@ def create_recipe_with_links(
     db.flush()
 
     for link in ingredients:
-        ingredient = db.query(Ingredient).filter(Ingredient.id == link.ingredient_id).first()
+        ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == link.ingredient_id).first()  # noqa: E712
         if ingredient is None:
             raise ValueError(f"Ingredient not found: {link.ingredient_id}")
         db.add(

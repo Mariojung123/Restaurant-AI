@@ -60,7 +60,7 @@ def process_invoice_items(items: list[dict], supplier, db: Session) -> list[dict
 
         ingredient = None
         if ingredient_id:
-            ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+            ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == ingredient_id).first()  # noqa: E712
 
         if not ingredient:
             ingredient = find_ingredient_by_name(db, name)

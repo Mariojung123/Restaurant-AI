@@ -80,7 +80,7 @@ class ForecastOut(BaseModel):
 @router.get("/ingredients", response_model=list[IngredientOut])
 def list_ingredients(db: Session = Depends(get_db)) -> list[IngredientOut]:
     """Return every tracked ingredient."""
-    return db.query(Ingredient).order_by(Ingredient.name).all()
+    return db.query(Ingredient).filter(Ingredient.is_deleted == False).order_by(Ingredient.name).all()  # noqa: E712
 
 
 @router.post("/logs", status_code=201)
@@ -133,7 +133,7 @@ def get_usage_history(
     db: Session = Depends(get_db),
 ) -> list[DailyUsageOut]:
     """Return per-day consumption of a single ingredient over the lookback window."""
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == ingredient_id).first()  # noqa: E712
     if ingredient is None:
         raise HTTPException(status_code=404, detail="Ingredient not found")
 
@@ -147,7 +147,7 @@ def get_forecast_for_ingredient(
     db: Session = Depends(get_db),
 ) -> ForecastOut:
     """Return a depletion forecast for a single ingredient."""
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == ingredient_id).first()  # noqa: E712
     if ingredient is None:
         raise HTTPException(status_code=404, detail="Ingredient not found")
 
@@ -172,7 +172,7 @@ def patch_ingredient(
     db: Session = Depends(get_db),
 ) -> IngredientOut:
     """Update current_stock and/or reorder_threshold for an ingredient."""
-    existing = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    existing = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == ingredient_id).first()  # noqa: E712
     if existing is None:
         raise HTTPException(status_code=404, detail="Ingredient not found")
 

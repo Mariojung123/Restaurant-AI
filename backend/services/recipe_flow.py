@@ -43,7 +43,7 @@ def resolve_confirm_items(db: Session, items: list) -> list[dict]:
 
         ingredient = None
         if item.ingredient_id is not None:
-            ingredient = db.query(Ingredient).filter(Ingredient.id == item.ingredient_id).first()
+            ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == item.ingredient_id).first()  # noqa: E712
             if ingredient is None:
                 raise ValueError(f"Ingredient not found: {item.ingredient_id}")
 

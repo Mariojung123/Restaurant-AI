@@ -16,7 +16,7 @@ def record_inventory_change(
 
     Returns (log, new_current_stock). Raises ValueError if ingredient not found.
     """
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == ingredient_id).first()  # noqa: E712
     if ingredient is None:
         raise ValueError(f"Ingredient not found: {ingredient_id}")
 

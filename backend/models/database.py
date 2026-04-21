@@ -13,6 +13,7 @@ import os
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Integer,
     String,
@@ -51,6 +52,7 @@ class Ingredient(Base):
     current_stock = Column(Float, nullable=False, default=0.0)
     reorder_threshold = Column(Float, nullable=False, default=0.0)
     notes = Column(Text, nullable=True)
+    is_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(
         DateTime,

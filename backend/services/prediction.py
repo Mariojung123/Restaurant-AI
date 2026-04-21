@@ -107,7 +107,7 @@ def forecast_all(
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
 ) -> list[DepletionForecast]:
     """Produce depletion forecasts for every ingredient in the catalog."""
-    ingredients: Iterable[Ingredient] = db.query(Ingredient).all()
+    ingredients: Iterable[Ingredient] = db.query(Ingredient).filter(Ingredient.is_deleted == False).all()  # noqa: E712
     return [forecast_ingredient(db, ing, lookback_days) for ing in ingredients]
 
 

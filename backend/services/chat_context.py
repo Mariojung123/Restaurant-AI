@@ -23,7 +23,7 @@ def matches_any(msg: str, keywords: set[str]) -> bool:
 def build_context(db: Session, user_message: str) -> str:
     blocks = []
 
-    ingredients = db.query(Ingredient).all()
+    ingredients = db.query(Ingredient).filter(Ingredient.is_deleted == False).all()  # noqa: E712
     if ingredients:
         forecasts = {f.ingredient_id: f for f in forecast_all(db)}
         lines = ["Ingredient | Unit | Stock | Days Left | Needs Reorder", "-" * 60]

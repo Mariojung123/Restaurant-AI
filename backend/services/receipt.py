@@ -83,7 +83,7 @@ def process_receipt_items(
         for ri in recipe_ingredients:
             if ri.quantity is None:
                 continue
-            ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
+            ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == ri.ingredient_id).first()  # noqa: E712
             if ingredient:
                 delta = convert_quantity(ri.quantity, ri.unit, ingredient.unit)
                 ingredient.current_stock -= delta * quantity

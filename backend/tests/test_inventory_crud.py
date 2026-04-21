@@ -76,15 +76,33 @@ def test_patch_ingredient_not_found(client):
 # ---------------------------------------------------------------------------
 
 def test_delete_ingredient_success(client, db_session):
-    """DELETE returns 204 and the row is removed from the database."""
+    """DELETE returns 204 and soft-deletes the row (is_deleted=True, row still in DB)."""
     ingredient = _create_ingredient(db_session, "inv-garlic")
     ingredient_id = ingredient.id
 
     response = client.delete(f"/api/inventory/ingredients/{ingredient_id}")
 
     assert response.status_code == 204
-    remaining = db_session.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
-    assert remaining is None
+    row = db_session.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    assert row is not None
+    assert row.is_deleted is True
+
+
+def test_delete_ingredient_restore_on_recreate(client, db_session):
+    """Re-creating a soft-deleted ingredient restores original PK with stock reset to 0."""
+    ingredient = _create_ingredient(db_session, "inv-pepper")
+    original_id = ingredient.id
+
+    client.delete(f"/api/inventory/ingredients/{original_id}")
+    db_session.expire_all()
+
+    from services.ingredient import create_ingredient
+    restored = create_ingredient(db_session, "inv-pepper", "kg")
+    db_session.flush()
+
+    assert restored.id == original_id
+    assert restored.is_deleted is False
+    assert restored.current_stock == 0.0
 
 
 def test_delete_ingredient_not_found(client):
