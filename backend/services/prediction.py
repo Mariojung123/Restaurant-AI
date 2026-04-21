@@ -13,6 +13,7 @@ from typing import Iterable, Optional
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, InventoryLog, RecipeIngredient, SalesLog
+from services.constants import CHANGE_TYPE_PURCHASE
 
 
 @dataclass
@@ -149,7 +150,7 @@ def last_purchase(db: Session, ingredient_id: int) -> Optional[InventoryLog]:
         db.query(InventoryLog)
         .filter(
             InventoryLog.ingredient_id == ingredient_id,
-            InventoryLog.change_type == "purchase",
+            InventoryLog.change_type == CHANGE_TYPE_PURCHASE,
         )
         .order_by(InventoryLog.occurred_at.desc())
         .first()

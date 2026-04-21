@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from models.database import Ingredient, Recipe, SalesLog
@@ -59,7 +59,7 @@ def test_chat_keyword_injects_sales(db_session):
     db_session.add(recipe)
     db_session.flush()
 
-    db_session.add(SalesLog(recipe_id=recipe.id, quantity=5, sold_at=datetime.utcnow()))
+    db_session.add(SalesLog(recipe_id=recipe.id, quantity=5, sold_at=datetime.now(timezone.utc)))
     db_session.flush()
 
     context = _build_context(db_session, "판매 현황 보여줘")

@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,10 +19,17 @@ from routers import receipt as receipt_router
 from models.database import Base, engine
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 app = FastAPI(
     title="Restaurant AI Partner",
     description="Natural language AI operations partner for small Canadian restaurants.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 allowed_origins = [
@@ -47,11 +55,6 @@ app.include_router(vision.router, prefix="/api/vision", tags=["vision"])
 app.include_router(invoice_router.router, prefix="/api/vision/invoice", tags=["invoice"])
 app.include_router(receipt_router.router, prefix="/api/vision/receipt", tags=["receipt"])
 app.include_router(recipe.router, prefix="/api/recipe", tags=["recipe"])
-
-
-@app.on_event("startup")
-def init_db():
-    Base.metadata.create_all(bind=engine)
 
 
 @app.get("/")

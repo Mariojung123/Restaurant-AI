@@ -6,11 +6,10 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from services.constants import ALLOWED_IMAGE_TYPES
 from services.claude import parse_image_with_claude
 
 router = APIRouter()
-
-_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 _DEFAULT_EXTRACTION_PROMPT = (
     "This is a restaurant purchase invoice or delivery receipt. "
@@ -29,7 +28,7 @@ async def parse_image(
     prompt: Optional[str] = Form(None),
 ) -> VisionResponse:
     """Parse an uploaded image using Claude Vision and return the raw reply."""
-    if file.content_type not in _ALLOWED_TYPES:
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported image type: {file.content_type}",

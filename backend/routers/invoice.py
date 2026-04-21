@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from models.database import InventoryLog, get_db
+from services.constants import AUTO_INVOICE_NOTE
 from services.invoice import fuzzy_match_ingredient, process_invoice_items
 from services.vision_common import call_vision_api, parse_vision_json, read_upload_file
 
@@ -92,6 +93,22 @@ class ConfirmRequest(BaseModel):
     items: list[ConfirmItem]
 
 
+def _parse_invoice_or_422(raw_text: str) -> InvoiceParseResult:
+    try:
+        return parse_vision_json(raw_text, InvoiceParseResult, "invoice")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _process_invoice_or_422(
+    item_dicts: list[dict], supplier: Optional[str], db: Session
+) -> list[dict]:
+    try:
+        return process_invoice_items(item_dicts, supplier, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 
 @router.post("/preview", response_model=PreviewResponse)
 async def preview_invoice(
@@ -101,10 +118,7 @@ async def preview_invoice(
     """Parse invoice image, return items with fuzzy match suggestions. No DB writes."""
     raw_bytes = await read_upload_file(file)
     raw_text = call_vision_api(raw_bytes, file.content_type, _INVOICE_EXTRACTION_PROMPT)
-    try:
-        parsed = parse_vision_json(raw_text, InvoiceParseResult, "invoice")
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    parsed = _parse_invoice_or_422(raw_text)
 
     duplicate_warning = False
     if parsed.supplier_name and parsed.invoice_date:
@@ -112,7 +126,7 @@ async def preview_invoice(
             db.query(InventoryLog)
             .filter(
                 InventoryLog.supplier == parsed.supplier_name,
-                InventoryLog.note == "Auto-created from invoice scan",
+                    InventoryLog.note == AUTO_INVOICE_NOTE,
             )
             .first()
             is not None
@@ -160,7 +174,7 @@ async def confirm_invoice(
         )
 
     item_dicts = [item.model_dump() for item in included]
-    processed = process_invoice_items(item_dicts, body.supplier, db)
+    processed = _process_invoice_or_422(item_dicts, body.supplier, db)
     db.commit()
 
     return InvoiceResponse(
@@ -179,10 +193,7 @@ async def process_invoice(
     """Parse an invoice image and auto-update inventory (no preview step)."""
     raw_bytes = await read_upload_file(file)
     raw_text = call_vision_api(raw_bytes, file.content_type, _INVOICE_EXTRACTION_PROMPT)
-    try:
-        parsed = parse_vision_json(raw_text, InvoiceParseResult, "invoice")
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    parsed = _parse_invoice_or_422(raw_text)
 
     if not parsed.items:
         return InvoiceResponse(
@@ -193,7 +204,7 @@ async def process_invoice(
         )
 
     item_dicts = [item.model_dump() for item in parsed.items]
-    processed = process_invoice_items(item_dicts, parsed.supplier_name, db)
+    processed = _process_invoice_or_422(item_dicts, parsed.supplier_name, db)
     db.commit()
 
     return InvoiceResponse(

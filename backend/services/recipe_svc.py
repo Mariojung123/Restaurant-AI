@@ -1,7 +1,8 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models.database import Ingredient, Recipe, RecipeIngredient
+from models.database import Ingredient, Recipe, RecipeIngredient, SalesLog
+from services.constants import DEFAULT_RECIPE_TOOL_UNIT, DEFAULT_UNIT
 from services.ingredient import FUZZY_MATCH_THRESHOLD, create_ingredient, fuzzy_match_ingredient
 
 
@@ -37,7 +38,7 @@ def save_recipe_core(
     for item in resolved_items:
         ingredient: Ingredient | None = item.get("ingredient")
         if ingredient is None:
-            ingredient = create_ingredient(db, item["name"], item.get("unit", "unit"))
+            ingredient = create_ingredient(db, item["name"], item.get("unit", DEFAULT_UNIT))
             created += 1
         else:
             linked += 1
@@ -47,7 +48,7 @@ def save_recipe_core(
                 recipe_id=recipe.id,
                 ingredient_id=ingredient.id,
                 quantity=item.get("quantity"),
-                unit=item.get("unit", "unit"),
+                unit=item.get("unit", DEFAULT_UNIT),
                 quantity_display=item.get("quantity_display"),
             )
         )
@@ -80,7 +81,7 @@ def register_recipe_from_tool(
                 "ingredient": ingredient,
                 "name": item["name"],
                 "quantity": item.get("quantity"),
-                "unit": item.get("unit", "ea"),
+                "unit": item.get("unit", DEFAULT_RECIPE_TOOL_UNIT),
                 "quantity_display": item.get("quantity_display", str(item.get("quantity", ""))),
             }
         )
@@ -122,7 +123,7 @@ def replace_recipe_ingredients(db: Session, recipe_id: int, items: list[dict]) -
             recipe_id=recipe_id,
             ingredient_id=ingredient.id,
             quantity=item.get("quantity"),
-            unit=item.get("unit", "unit"),
+            unit=item.get("unit", DEFAULT_UNIT),
             quantity_display=item.get("quantity_display"),
         ))
 
@@ -158,3 +159,54 @@ def delete_recipe_by_id(db: Session, recipe_id: int) -> bool:
         return False
     db.delete(recipe)
     return True
+
+
+def create_recipe_with_links(
+    db: Session,
+    name: str,
+    description: str | None,
+    price: float,
+    ingredients: list,
+) -> Recipe:
+    """Create recipe and ingredient links. Raises ValueError for invalid ingredient id."""
+    recipe = Recipe(name=name, description=description, price=price)
+    db.add(recipe)
+    db.flush()
+
+    for link in ingredients:
+        ingredient = db.query(Ingredient).filter(Ingredient.id == link.ingredient_id).first()
+        if ingredient is None:
+            raise ValueError(f"Ingredient not found: {link.ingredient_id}")
+        db.add(
+            RecipeIngredient(
+                recipe_id=recipe.id,
+                ingredient_id=link.ingredient_id,
+                quantity=link.quantity,
+                unit=link.unit,
+                quantity_display=link.quantity_display,
+            )
+        )
+
+    db.flush()
+    return recipe
+
+
+def record_recipe_sale(
+    db: Session,
+    recipe_id: int,
+    quantity: int,
+    total_price: float | None,
+) -> SalesLog:
+    """Create a SalesLog for an existing recipe. Raises ValueError if missing recipe."""
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if recipe is None:
+        raise ValueError("Recipe not found")
+
+    sale = SalesLog(
+        recipe_id=recipe_id,
+        quantity=quantity,
+        total_price=total_price,
+    )
+    db.add(sale)
+    db.flush()
+    return sale

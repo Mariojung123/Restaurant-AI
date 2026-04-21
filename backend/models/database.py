@@ -10,7 +10,7 @@ Tables:
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -35,6 +35,11 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 Base = declarative_base()
 
 
+def utc_now() -> datetime:
+    """Return timezone-aware current UTC datetime."""
+    return datetime.now(timezone.utc)
+
+
 class Ingredient(Base):
     """A raw ingredient tracked in inventory."""
 
@@ -46,11 +51,11 @@ class Ingredient(Base):
     current_stock = Column(Float, nullable=False, default=0.0)
     reorder_threshold = Column(Float, nullable=False, default=0.0)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False,
     )
 
@@ -75,11 +80,11 @@ class Recipe(Base):
     name = Column(String(200), nullable=False, unique=True, index=True)
     description = Column(Text, nullable=True)
     price = Column(Float, nullable=False, default=0.0)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False,
     )
 
@@ -127,7 +132,7 @@ class InventoryLog(Base):
     unit_cost = Column(Float, nullable=True)
     supplier = Column(String(200), nullable=True)
     note = Column(Text, nullable=True)
-    occurred_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    occurred_at = Column(DateTime, default=utc_now, nullable=False)
 
     ingredient = relationship("Ingredient", back_populates="inventory_logs")
 
@@ -141,7 +146,7 @@ class SalesLog(Base):
     recipe_id = Column(Integer, ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
     quantity = Column(Integer, nullable=False, default=1)
     total_price = Column(Float, nullable=True)
-    sold_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    sold_at = Column(DateTime, default=utc_now, nullable=False)
 
     recipe = relationship("Recipe", back_populates="sales_logs")
 
@@ -155,7 +160,7 @@ class ChatHistory(Base):
     session_id = Column(String(64), nullable=False, index=True)
     role = Column(String(16), nullable=False)  # "user" | "assistant"
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
 
 def get_db():

@@ -38,6 +38,13 @@ class ChatResponse(BaseModel):
     session_id: str
 
 
+def _call_claude_or_500(messages: list[dict], system: str, tools: list[dict]):
+    try:
+        return chat_with_claude(messages, system, tools=tools)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 def _run_recipe_tool(
     db: Session,
     all_messages: list[dict],
@@ -74,10 +81,7 @@ def _run_recipe_tool(
             "content": [{"type": "tool_result", "tool_use_id": tool_id, "content": tool_result}],
         },
     ]
-    try:
-        final = chat_with_claude(follow_up, system, tools=[RECIPE_TOOL])
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    final = _call_claude_or_500(follow_up, system, [RECIPE_TOOL])
     return extract_text(final)
 
 
@@ -92,10 +96,7 @@ def _handle_chat(
     system = build_system_prompt(context)
     all_messages = history + [m.model_dump() for m in messages]
 
-    try:
-        response = chat_with_claude(all_messages, system, tools=[RECIPE_TOOL])
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    response = _call_claude_or_500(all_messages, system, [RECIPE_TOOL])
 
     if response.stop_reason == "tool_use":
         reply = _run_recipe_tool(db, all_messages, system, response)

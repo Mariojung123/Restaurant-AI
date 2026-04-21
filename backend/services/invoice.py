@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, InventoryLog
+from services.constants import AUTO_INVOICE_NOTE, CHANGE_TYPE_DELIVERY, DEFAULT_UNIT
 from services.ingredient import create_ingredient, find_ingredient_by_name
 from services.unit_convert import convert_quantity
 
@@ -18,11 +19,11 @@ def _create_log(
 ) -> InventoryLog:
     log = InventoryLog(
         ingredient_id=ingredient.id,
-        change_type="delivery",
+        change_type=CHANGE_TYPE_DELIVERY,
         quantity=raw_quantity,
         unit_cost=unit_cost,
         supplier=supplier,
-        note="Auto-created from invoice scan",
+        note=AUTO_INVOICE_NOTE,
     )
     ingredient.current_stock += stock_delta
     db.add(log)
@@ -40,7 +41,7 @@ def process_invoice_items(items: list[dict], supplier, db: Session) -> list[dict
     for item in items:
         name = item["name"]
         quantity = float(item["quantity"])
-        unit = item.get("unit") or "unit"
+        unit = item.get("unit") or DEFAULT_UNIT
         unit_price = item.get("unit_price")
         ingredient_id = item.get("ingredient_id")
 

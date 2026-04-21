@@ -1,6 +1,6 @@
 """Context building for the restaurant chat assistant."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -34,7 +34,7 @@ def build_context(db: Session, user_message: str) -> str:
         blocks.append("=== Inventory & Forecast ===\n" + "\n".join(lines))
 
     if matches_any(user_message, SALES_KEYWORDS):
-        since = datetime.utcnow() - timedelta(days=7)
+        since = datetime.now(timezone.utc) - timedelta(days=7)
         rows = (
             db.query(Recipe.name, func.sum(SalesLog.quantity).label("total_qty"))
             .join(SalesLog, SalesLog.recipe_id == Recipe.id)

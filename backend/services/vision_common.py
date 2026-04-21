@@ -5,10 +5,10 @@ import json
 from typing import Type, TypeVar
 
 from fastapi import HTTPException, UploadFile
+from pydantic import ValidationError
 
+from services.constants import ALLOWED_IMAGE_TYPES
 from services.claude import parse_image_with_claude, strip_fences
-
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 T = TypeVar("T")
 
@@ -49,5 +49,5 @@ def parse_vision_json(raw: str, model_class: Type[T], doc_type: str = "document"
         raise ValueError(f"Claude returned non-JSON: {exc}") from exc
     try:
         return model_class.model_validate(data)
-    except Exception as exc:
+    except ValidationError as exc:
         raise ValueError(f"Invalid {doc_type} structure: {exc}") from exc

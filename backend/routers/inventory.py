@@ -9,7 +9,7 @@ and will be expanded as the MVP matures.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, InventoryLog, get_db
@@ -33,8 +33,7 @@ class IngredientOut(BaseModel):
     current_stock: float
     reorder_threshold: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class InventoryLogIn(BaseModel):

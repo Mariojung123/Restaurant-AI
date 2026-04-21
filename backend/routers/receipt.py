@@ -90,6 +90,22 @@ class ConfirmResponse(BaseModel):
     items: list[ResultItem]
 
 
+def _parse_receipt_or_422(raw_text: str) -> ReceiptParseResult:
+    try:
+        return parse_vision_json(raw_text, ReceiptParseResult, "receipt")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _process_receipt_or_422(
+    item_dicts: list[dict], sale_date: Optional[str], db: Session
+) -> tuple[list[dict], int]:
+    try:
+        return process_receipt_items(item_dicts, sale_date, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 
 @router.post("/preview", response_model=PreviewResponse)
 async def preview_receipt(
@@ -99,10 +115,7 @@ async def preview_receipt(
     """Parse receipt image, return items with fuzzy recipe match suggestions. No DB writes."""
     raw_bytes = await read_upload_file(file)
     raw_text = call_vision_api(raw_bytes, file.content_type, _RECEIPT_EXTRACTION_PROMPT)
-    try:
-        parsed = parse_vision_json(raw_text, ReceiptParseResult, "receipt")
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    parsed = _parse_receipt_or_422(raw_text)
 
     duplicate_warning = False
     if parsed.sale_date:
@@ -165,7 +178,7 @@ async def confirm_receipt(
         )
 
     item_dicts = [item.model_dump() for item in included]
-    results, skipped_count = process_receipt_items(item_dicts, body.sale_date, db)
+    results, skipped_count = _process_receipt_or_422(item_dicts, body.sale_date, db)
     skipped_count += len(body.items) - len(included)
     db.commit()
 
