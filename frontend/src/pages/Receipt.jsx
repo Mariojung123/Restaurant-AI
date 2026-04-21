@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { previewReceipt, confirmReceipt } from '../api/vision.js';
 import { ImageUploadZone } from '../components/ImageUploadZone.jsx';
 import { useVisionUpload } from '../hooks/useVisionUpload.js';
+import { MatchBadge } from '../components/MatchBadge.jsx';
 
 const STEP = { UPLOAD: 'upload', REVIEW: 'review', DONE: 'done' };
 
@@ -119,29 +120,6 @@ function Receipt() {
     dispatch({ type: 'RESET' });
   }
 
-  function matchBadge(item, idx) {
-    if (!item.include) return null;
-    if (item.match_score === 1.0) {
-      return <span className="text-xs text-green-600 font-medium">✓ Matched</span>;
-    }
-    if (item.match_score >= 0.7) {
-      return (
-        <select
-          className="text-xs border rounded px-1 py-0.5 text-yellow-700 bg-yellow-50"
-          value={item._pendingRecipeId !== null ? String(item._pendingRecipeId) : '__skip__'}
-          onChange={(e) => dispatch({ type: 'SET_MATCH', idx, value: e.target.value })}
-        >
-          {item.suggested_match && (
-            <option value={String(item.suggested_match.id)}>
-              {item.suggested_match.name}
-            </option>
-          )}
-          <option value="__skip__">Skip</option>
-        </select>
-      );
-    }
-    return <span className="text-xs text-slate-400 font-medium">✨ No recipe — will skip</span>;
-  }
 
   if (step === STEP.UPLOAD) {
     return (
@@ -239,7 +217,18 @@ function Receipt() {
                       placeholder="—"
                     />
                   </td>
-                  <td className="py-1.5">{matchBadge(item, idx)}</td>
+                  <td className="py-1.5">
+                    <MatchBadge
+                      item={item}
+                      idx={idx}
+                      dispatch={dispatch}
+                      selectValue={item._pendingRecipeId !== null ? String(item._pendingRecipeId) : '__skip__'}
+                      fallbackOption="Skip"
+                      fallbackValue="__skip__"
+                      noMatchLabel="✨ No recipe — will skip"
+                      noMatchClass="text-slate-400"
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

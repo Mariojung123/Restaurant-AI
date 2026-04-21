@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { previewInvoice, confirmInvoice } from '../api/vision.js';
 import { ImageUploadZone } from '../components/ImageUploadZone.jsx';
 import { useVisionUpload } from '../hooks/useVisionUpload.js';
+import { MatchBadge } from '../components/MatchBadge.jsx';
+import { FUZZY_MATCH_THRESHOLD } from '../constants';
 
 const STEP = { UPLOAD: 'upload', REVIEW: 'review', DONE: 'done' };
 
@@ -83,7 +85,7 @@ function Invoice() {
           ...it,
           include: true,
           ingredient_id: it.suggested_match?.id ?? null,
-          _useNew: !it.suggested_match || it.match_score < 0.7,
+          _useNew: !it.suggested_match || it.match_score < FUZZY_MATCH_THRESHOLD,
         })),
       });
     } catch (e) {
@@ -117,29 +119,6 @@ function Invoice() {
     dispatch({ type: 'RESET' });
   }
 
-  function matchBadge(item, idx) {
-    if (!item.include) return null;
-    if (item.match_score === 1.0) {
-      return <span className="text-xs text-green-600 font-medium">✓ Matched</span>;
-    }
-    if (item.match_score >= 0.7) {
-      return (
-        <select
-          className="text-xs border rounded px-1 py-0.5 text-yellow-700 bg-yellow-50"
-          value={item._useNew ? '__new__' : String(item.ingredient_id ?? '__new__')}
-          onChange={(e) => dispatch({ type: 'SET_MATCH', idx, value: e.target.value })}
-        >
-          {item.suggested_match && (
-            <option value={String(item.suggested_match.id)}>
-              {item.suggested_match.name}
-            </option>
-          )}
-          <option value="__new__">Create new</option>
-        </select>
-      );
-    }
-    return <span className="text-xs text-blue-600 font-medium">✨ New ingredient</span>;
-  }
 
   if (step === STEP.UPLOAD) {
     return (
@@ -245,7 +224,18 @@ function Invoice() {
                       placeholder="—"
                     />
                   </td>
-                  <td className="py-1.5">{matchBadge(item, idx)}</td>
+                  <td className="py-1.5">
+                    <MatchBadge
+                      item={item}
+                      idx={idx}
+                      dispatch={dispatch}
+                      selectValue={item._useNew ? '__new__' : String(item.ingredient_id ?? '__new__')}
+                      fallbackOption="Create new"
+                      fallbackValue="__new__"
+                      noMatchLabel="✨ New ingredient"
+                      noMatchClass="text-blue-600"
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
