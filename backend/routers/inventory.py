@@ -60,6 +60,7 @@ class ForecastOut(BaseModel):
 
     ingredient_id: int
     ingredient_name: str
+    unit: str
     current_stock: float
     daily_consumption: float
     days_remaining: Optional[float]
@@ -108,6 +109,7 @@ def get_forecast(db: Session = Depends(get_db)) -> list[ForecastOut]:
         ForecastOut(
             ingredient_id=f.ingredient_id,
             ingredient_name=f.ingredient_name,
+            unit=f.unit,
             current_stock=f.current_stock,
             daily_consumption=f.daily_consumption,
             days_remaining=f.days_remaining,
@@ -148,6 +150,7 @@ def get_forecast_for_ingredient(
     return ForecastOut(
         ingredient_id=f.ingredient_id,
         ingredient_name=f.ingredient_name,
+        unit=f.unit,
         current_stock=f.current_stock,
         daily_consumption=f.daily_consumption,
         days_remaining=f.days_remaining,

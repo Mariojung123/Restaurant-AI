@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { getForecast, getIngredientHistory } from '../api/inventory';
 
+function formatStock(value, unit) {
+  if (unit === 'g' && value >= 1000) return `${+((value / 1000).toFixed(3))}kg`;
+  if (unit === 'mL' && value >= 1000) return `${+((value / 1000).toFixed(3))}L`;
+  return `${+(value.toFixed(3))}${unit}`;
+}
+
 const URGENT_DAYS = 7;
 const WARNING_DAYS = 14;
 const LOOKBACK_DAYS = 14;
@@ -134,7 +140,7 @@ function ForecastCard({ item, isSelected, onSelect }) {
       <div className="space-y-0.5">
         <p className="text-sm font-medium">{item.ingredient_name}</p>
         <p className="text-xs text-slate-500">
-          Stock: {item.current_stock} | Daily use: {item.daily_consumption.toFixed(2)}
+          Stock: {formatStock(item.current_stock, item.unit)} | Daily use: {formatStock(item.daily_consumption, item.unit)}
         </p>
         <DepletionDate item={item} />
       </div>

@@ -14,6 +14,12 @@ _UNIT_TABLE: dict[str, tuple[str, float]] = {
     "tbsp":   ("volume", 14.7868),
     "cup":    ("volume", 240.0),
     "fl oz":  ("volume", 29.5735),
+    "ea":     ("count",  1.0),
+    "unit":   ("count",  1.0),
+    "pc":     ("count",  1.0),
+    "piece":  ("count",  1.0),
+    "clove":  ("count",  1.0),
+    "cloves": ("count",  1.0),
 }
 
 
@@ -37,23 +43,23 @@ def convert_quantity(quantity: float, from_unit: str, to_unit: str) -> float:
 
     if from_info is None or to_info is None:
         logger.warning(
-            "Unknown unit in conversion: from=%r to=%r — using raw quantity",
+            "Unknown unit in conversion: from=%r to=%r — skipping deduction (returning 0.0)",
             from_unit,
             to_unit,
         )
-        return quantity
+        return 0.0
 
     from_dim, from_factor = from_info
     to_dim, to_factor = to_info
 
     if from_dim != to_dim:
         logger.warning(
-            "Incompatible unit dimensions: %r (%s) → %r (%s) — using raw quantity",
+            "Incompatible unit dimensions: %r (%s) → %r (%s) — skipping deduction (returning 0.0)",
             from_unit,
             from_dim,
             to_unit,
             to_dim,
         )
-        return quantity
+        return 0.0
 
     return quantity * from_factor / to_factor

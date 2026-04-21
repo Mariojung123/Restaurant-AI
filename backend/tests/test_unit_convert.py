@@ -34,21 +34,37 @@ def test_400g_from_30kg_stock():
     assert abs(30.0 - deduct - 29.6) < 1e-9
 
 
-def test_unknown_from_unit_returns_raw(caplog):
+def test_unknown_from_unit_returns_zero(caplog):
     result = convert_quantity(5.0, "furlong", "kg")
-    assert result == 5.0
+    assert result == 0.0
     assert "Unknown unit" in caplog.text
 
 
-def test_unknown_to_unit_returns_raw(caplog):
+def test_unknown_to_unit_returns_zero(caplog):
     result = convert_quantity(5.0, "kg", "parsec")
-    assert result == 5.0
+    assert result == 0.0
     assert "Unknown unit" in caplog.text
 
 
-def test_incompatible_dimensions_returns_raw(caplog):
+def test_incompatible_dimensions_returns_zero(caplog):
     result = convert_quantity(5.0, "kg", "l")
-    assert result == 5.0
+    assert result == 0.0
+    assert "Incompatible" in caplog.text
+
+
+def test_ea_to_ea():
+    assert convert_quantity(3.0, "ea", "ea") == 3.0
+
+
+def test_g_to_ea_returns_zero(caplog):
+    result = convert_quantity(400.0, "g", "ea")
+    assert result == 0.0
+    assert "Incompatible" in caplog.text
+
+
+def test_g_to_unit_returns_zero(caplog):
+    result = convert_quantity(400.0, "g", "unit")
+    assert result == 0.0
     assert "Incompatible" in caplog.text
 
 

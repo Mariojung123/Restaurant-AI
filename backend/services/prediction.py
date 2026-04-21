@@ -33,6 +33,7 @@ class DepletionForecast:
 
     ingredient_id: int
     ingredient_name: str
+    unit: str
     current_stock: float
     daily_consumption: float
     days_remaining: Optional[float]
@@ -90,6 +91,7 @@ def forecast_ingredient(
     return DepletionForecast(
         ingredient_id=ingredient.id,
         ingredient_name=ingredient.name,
+        unit=ingredient.unit,
         current_stock=ingredient.current_stock,
         daily_consumption=daily,
         days_remaining=days_remaining,

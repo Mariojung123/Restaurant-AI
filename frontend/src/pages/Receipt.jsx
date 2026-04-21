@@ -37,13 +37,19 @@ function reducer(state, action) {
       return { ...state, loading: false, error: action.error };
     case 'SET_SALE_DATE':
       return { ...state, saleDate: action.value };
-    case 'UPDATE_ITEM':
-      return {
-        ...state,
-        items: state.items.map((it, i) =>
-          i === action.idx ? { ...it, [action.field]: action.value } : it
-        ),
-      };
+    case 'UPDATE_ITEM': {
+      const updated = state.items.map((it, i) => {
+        if (i !== action.idx) return it;
+        const next = { ...it, [action.field]: action.value };
+        if (action.field === 'quantity' || action.field === 'unit_price') {
+          const qty = parseFloat(action.field === 'quantity' ? action.value : it.quantity);
+          const price = parseFloat(action.field === 'unit_price' ? action.value : it.unit_price);
+          if (!isNaN(qty) && !isNaN(price)) next.total_price = String(+(qty * price).toFixed(2));
+        }
+        return next;
+      });
+      return { ...state, items: updated };
+    }
     case 'SET_MATCH':
       return {
         ...state,
