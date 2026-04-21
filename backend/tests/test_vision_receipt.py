@@ -302,7 +302,7 @@ def test_confirm_null_recipe_ingredient_skips_deduction(client, db_session):
     assert ing.current_stock == 5.0
 
 
-def test_confirm_allows_negative_stock(client, db_session):
+def test_confirm_clamps_stock_to_zero(client, db_session):
     recipe, ingredient = _make_recipe_with_ingredient(
         db_session, "cnf-low-stock-dish-99", "cnf-low-stock-ing-99", qty=5.0
     )
@@ -328,7 +328,7 @@ def test_confirm_allows_negative_stock(client, db_session):
 
     db_session.expire_all()
     ing = db_session.query(Ingredient).filter_by(id=ingredient.id).first()
-    assert ing.current_stock == -3.0
+    assert ing.current_stock == 0.0
 
 
 # ── service unit tests ────────────────────────────────────────────────────────

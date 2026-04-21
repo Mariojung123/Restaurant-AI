@@ -86,7 +86,7 @@ def process_receipt_items(
             ingredient = db.query(Ingredient).filter(Ingredient.is_deleted == False, Ingredient.id == ri.ingredient_id).first()  # noqa: E712
             if ingredient:
                 delta = convert_quantity(ri.quantity, ri.unit, ingredient.unit)
-                ingredient.current_stock -= delta * quantity
+                ingredient.current_stock = max(0.0, round(ingredient.current_stock - delta * quantity, 6))
                 deducted += 1
 
         db.flush()

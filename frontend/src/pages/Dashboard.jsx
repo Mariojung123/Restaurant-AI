@@ -7,11 +7,22 @@ function formatStock(value, unit) {
   return `${+(value.toFixed(3))}${unit}`;
 }
 
-const URGENT_DAYS = 7;
-const WARNING_DAYS = 14;
-const LOOKBACK_DAYS = 14;
-const GAUGE_DENOMINATOR_MULTIPLIER = 2;
+function formatWeekly(dailyValue, unit) {
+  return `${formatStock(dailyValue * DAYS_PER_WEEK, unit)}/week`;
+}
+
+function formatPurchaseDate(isoString) {
+  if (!isoString) return 'No record';
+  const date = new Date(isoString);
+  return date.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+}
+
+const URGENT_DAYS = 3;
+const WARNING_DAYS = 5;
+const LOOKBACK_DAYS = 7;
+const GAUGE_DENOMINATOR_MULTIPLIER = 5;
 const LOOKBACK_OPTIONS = [7, 14];
+const DAYS_PER_WEEK = 7;
 
 function isUrgent(item) {
   const level = urgencyLevel(item);
@@ -62,7 +73,7 @@ function UsageBar({ amount, max }) {
   );
 }
 
-function StockGauge({ currentStock, reorderThreshold, unit }) {
+function StockGauge({ currentStock, reorderThreshold, unit, lastPurchaseDate }) {
   const denominator = reorderThreshold * GAUGE_DENOMINATOR_MULTIPLIER;
   const fillPct = denominator > 0 ? Math.min((currentStock / denominator) * 100, 100) : 0;
   const markerPct = denominator > 0 ? Math.min((reorderThreshold / denominator) * 100, 100) : 50;
@@ -83,15 +94,15 @@ function StockGauge({ currentStock, reorderThreshold, unit }) {
         )}
       </div>
       <p className="text-xs text-slate-500">
-        Stock: {formatStock(currentStock, unit)} / Reorder at: {formatStock(reorderThreshold, unit)}
+        Stock: {formatStock(currentStock, unit)} / Last order: {formatPurchaseDate(lastPurchaseDate)}
       </p>
     </div>
   );
 }
 
 function EditForm({ item, onSave, onCancel }) {
-  const [stock, setStock] = useState(String(item.current_stock));
-  const [threshold, setThreshold] = useState(String(item.reorder_threshold));
+  const [stock, setStock] = useState(String(+item.current_stock.toFixed(3)));
+  const [threshold, setThreshold] = useState(String(+item.reorder_threshold.toFixed(3)));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -283,6 +294,7 @@ function IngredientDetailPanel({ ingredientId, ingredientName, item, onClose, on
         currentStock={item.current_stock}
         reorderThreshold={item.reorder_threshold}
         unit={item.unit}
+        lastPurchaseDate={item.last_purchase_date}
       />
 
       {showEdit && (
@@ -333,7 +345,7 @@ function ForecastCard({ item, isSelected, onSelect }) {
       <div className="space-y-0.5">
         <p className="text-sm font-medium">{item.ingredient_name}</p>
         <p className="text-xs text-slate-500">
-          Stock: {formatStock(item.current_stock, item.unit)} | Daily use: {formatStock(item.daily_consumption, item.unit)}
+          Stock: {formatStock(item.current_stock, item.unit)} | Weekly use: {formatWeekly(item.daily_consumption, item.unit)}
         </p>
         <DepletionDate item={item} />
       </div>
@@ -373,8 +385,11 @@ function Dashboard() {
     loadForecast();
   }
 
+  const LEVEL_ORDER = { reorder: 0, urgent: 0, warning: 1, ok: 2, 'no-data': 3 };
   const reorderItems = forecast.filter(isUrgent);
-  const otherItems   = forecast.filter((i) => !isUrgent(i));
+  const otherItems   = forecast
+    .filter((i) => !isUrgent(i))
+    .sort((a, b) => LEVEL_ORDER[urgencyLevel(a)] - LEVEL_ORDER[urgencyLevel(b)]);
 
   function renderList(items) {
     return (
@@ -407,7 +422,7 @@ function Dashboard() {
       <header>
         <h1 className="text-xl font-semibold">Inventory forecast</h1>
         <p className="text-sm text-slate-500">
-          Projected depletion based on last {LOOKBACK_DAYS} days of sales. Click an ingredient to see daily usage.
+          Projected depletion based on last {LOOKBACK_DAYS} days of sales. Click an ingredient to see weekly usage.
         </p>
       </header>
 

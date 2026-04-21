@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from models.database import Ingredient, InventoryLog, RecipeIngredient, SalesLog
 from services.constants import CHANGE_TYPE_PURCHASE
+from services.unit_convert import convert_quantity
 
 
 @dataclass
@@ -25,7 +26,7 @@ class DailyUsage:
 
 
 # Default lookback window for computing daily consumption rate
-DEFAULT_LOOKBACK_DAYS = 14
+DEFAULT_LOOKBACK_DAYS = 7
 
 
 @dataclass
@@ -41,30 +42,30 @@ class DepletionForecast:
     depletion_date: Optional[datetime]
     reorder_threshold: float
     needs_reorder: bool
+    last_purchase_date: Optional[datetime]
 
 
 def _daily_consumption_for_ingredient(
     db: Session,
-    ingredient_id: int,
+    ingredient: Ingredient,
     lookback_days: int,
 ) -> float:
     """Estimate average daily consumption of an ingredient over a lookback window."""
     since = datetime.now(timezone.utc) - timedelta(days=lookback_days)
 
-    # Join sales_logs -> recipe_ingredients to translate sold dishes into ingredient units
     rows = (
-        db.query(SalesLog.quantity, RecipeIngredient.quantity)
+        db.query(SalesLog.quantity, RecipeIngredient.quantity, RecipeIngredient.unit)
         .join(RecipeIngredient, RecipeIngredient.recipe_id == SalesLog.recipe_id)
         .filter(
-            RecipeIngredient.ingredient_id == ingredient_id,
+            RecipeIngredient.ingredient_id == ingredient.id,
             SalesLog.sold_at >= since,
         )
         .all()
     )
 
     total_used = sum(
-        sold_qty * per_serving
-        for sold_qty, per_serving in rows
+        sold_qty * convert_quantity(per_serving, ri_unit, ingredient.unit)
+        for sold_qty, per_serving, ri_unit in rows
         if per_serving is not None
     )
     if lookback_days <= 0:
@@ -78,7 +79,7 @@ def forecast_ingredient(
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
 ) -> DepletionForecast:
     """Produce a DepletionForecast for a single ingredient."""
-    daily = _daily_consumption_for_ingredient(db, ingredient.id, lookback_days)
+    daily = _daily_consumption_for_ingredient(db, ingredient, lookback_days)
 
     if daily > 0:
         days_remaining = ingredient.current_stock / daily
@@ -88,6 +89,8 @@ def forecast_ingredient(
         depletion_date = None
 
     needs_reorder = ingredient.current_stock <= ingredient.reorder_threshold
+    purchase_log = last_purchase(db, ingredient.id)
+    last_purchase_date = purchase_log.occurred_at if purchase_log else None
 
     return DepletionForecast(
         ingredient_id=ingredient.id,
@@ -99,6 +102,7 @@ def forecast_ingredient(
         depletion_date=depletion_date,
         reorder_threshold=ingredient.reorder_threshold,
         needs_reorder=needs_reorder,
+        last_purchase_date=last_purchase_date,
     )
 
 
@@ -117,10 +121,14 @@ def daily_usage_history(
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
 ) -> list[DailyUsage]:
     """Return per-day consumption of an ingredient over the lookback window."""
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if ingredient is None:
+        return []
+
     since = datetime.now(timezone.utc) - timedelta(days=lookback_days)
 
     rows = (
-        db.query(SalesLog.sold_at, SalesLog.quantity, RecipeIngredient.quantity)
+        db.query(SalesLog.sold_at, SalesLog.quantity, RecipeIngredient.quantity, RecipeIngredient.unit)
         .join(RecipeIngredient, RecipeIngredient.recipe_id == SalesLog.recipe_id)
         .filter(
             RecipeIngredient.ingredient_id == ingredient_id,
@@ -130,11 +138,12 @@ def daily_usage_history(
     )
 
     daily: dict[str, float] = {}
-    for sold_at, sold_qty, per_serving in rows:
+    for sold_at, sold_qty, per_serving, ri_unit in rows:
         if per_serving is None:
             continue
         date_key = sold_at.strftime("%Y-%m-%d")
-        daily[date_key] = daily.get(date_key, 0.0) + sold_qty * per_serving
+        converted = convert_quantity(per_serving, ri_unit, ingredient.unit)
+        daily[date_key] = daily.get(date_key, 0.0) + sold_qty * converted
 
     result: list[DailyUsage] = []
     for i in range(lookback_days):

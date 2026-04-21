@@ -75,6 +75,7 @@ class ForecastOut(BaseModel):
     depletion_date: Optional[str]
     reorder_threshold: float
     needs_reorder: bool
+    last_purchase_date: Optional[str]
 
 
 @router.get("/ingredients", response_model=list[IngredientOut])
@@ -121,6 +122,7 @@ def get_forecast(db: Session = Depends(get_db)) -> list[ForecastOut]:
             depletion_date=f.depletion_date.isoformat() if f.depletion_date else None,
             reorder_threshold=f.reorder_threshold,
             needs_reorder=f.needs_reorder,
+            last_purchase_date=f.last_purchase_date.isoformat() if f.last_purchase_date else None,
         )
         for f in forecasts
     ]
@@ -162,6 +164,7 @@ def get_forecast_for_ingredient(
         depletion_date=f.depletion_date.isoformat() if f.depletion_date else None,
         reorder_threshold=f.reorder_threshold,
         needs_reorder=f.needs_reorder,
+        last_purchase_date=f.last_purchase_date.isoformat() if f.last_purchase_date else None,
     )
 
 

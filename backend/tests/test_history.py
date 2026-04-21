@@ -51,11 +51,11 @@ def test_hst_sale_appears_on_correct_day(db_session):
     db_session.add_all([ing, recipe])
     db_session.flush()
 
-    link = RecipeIngredient(recipe_id=recipe.id, ingredient_id=ing.id, quantity=2.0, unit="g")
+    link = RecipeIngredient(recipe_id=recipe.id, ingredient_id=ing.id, quantity=2.0, unit="kg")
     db_session.add(link)
     db_session.flush()
 
-    # 3 sold yesterday → 3 * 2.0 = 6.0 used
+    # 3 sold yesterday → 3 * 2.0 = 6.0 kg used
     db_session.add(_sale(recipe, qty=3, days_ago=1))
     db_session.flush()
 
