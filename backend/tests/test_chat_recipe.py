@@ -1,234 +1,135 @@
-"""Tests for recipe registration via chat (pending flow)."""
+"""Tests for recipe registration via chat (tool use flow)."""
 
-import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-import pytest
-
-from models.database import ChatHistory, Ingredient, Recipe, RecipeIngredient
-from routers.chat import (
-    _is_confirmation,
-    _is_recipe_register_intent,
-    _is_rejection,
-)
-from services.pending_recipe import (
-    format_confirmation_message as _format_confirmation_message,
-    get_pending as _get_pending_recipe,
-    save_pending as _save_pending_recipe,
-)
+from models.database import Ingredient, Recipe, RecipeIngredient
 
 
-PARSED_AGLIO = {
-    "name": "알리오 올리오",
-    "lang": "ko",
-    "items": [
-        {
-            "name": "pasta",
-            "quantity": 120.0,
-            "unit": "g",
-            "quantity_display": "파스타 120g",
-            "reasoning": None,
-        },
-        {
-            "name": "garlic",
-            "quantity": 9.0,
-            "unit": "g",
-            "quantity_display": "마늘 한 큰술",
-            "reasoning": "마늘 한 큰술은 약 9g 정도 입니다!",
-        },
-        {
-            "name": "salt",
-            "quantity": 2.0,
-            "unit": "g",
-            "quantity_display": "소금 조금",
-            "reasoning": "소금 조금은 약 2g 정도 입니다!",
-        },
-    ],
-}
+def _text_message(text: str) -> MagicMock:
+    block = MagicMock()
+    block.type = "text"
+    block.text = text
+    msg = MagicMock()
+    msg.stop_reason = "end_turn"
+    msg.content = [block]
+    return msg
 
 
-# ── unit: keyword detection ───────────────────────────────────────────────────
-
-def test_is_recipe_register_intent_korean():
-    assert _is_recipe_register_intent("알리오 올리오 레시피 등록해줘")
-    assert _is_recipe_register_intent("새 레시피 추가해줘, 재료는...")
-    assert _is_recipe_register_intent("레시피를 등록하고 싶어")
-
-def test_is_recipe_register_intent_english():
-    assert _is_recipe_register_intent("add recipe: pasta 120g")
-    assert _is_recipe_register_intent("register recipe aglio olio")
-
-def test_is_recipe_register_intent_negative():
-    assert not _is_recipe_register_intent("재고 얼마나 남았어?")
-    assert not _is_recipe_register_intent("이번 주 뭐가 잘 팔렸어?")
-
-def test_is_confirmation():
-    assert _is_confirmation("응")
-    assert _is_confirmation("네")
-    assert _is_confirmation("좋아")
-    assert _is_confirmation("ok")
-    assert _is_confirmation("yes")
-    assert not _is_confirmation("아니")
-    assert not _is_confirmation("취소")
-
-def test_is_rejection():
-    assert _is_rejection("아니")
-    assert _is_rejection("취소할게")
-    assert _is_rejection("하지마")
-    assert not _is_rejection("응")
-    assert not _is_rejection("네")
+def _tool_use_message(name: str, price: float, items: list[dict]) -> MagicMock:
+    tool_block = MagicMock()
+    tool_block.type = "tool_use"
+    tool_block.id = "tool_test_001"
+    tool_block.name = "register_recipe"
+    tool_block.input = {"name": name, "price": price, "items": items}
+    msg = MagicMock()
+    msg.stop_reason = "tool_use"
+    msg.content = [tool_block]
+    return msg
 
 
-# ── unit: format confirmation message ────────────────────────────────────────
-
-def test_format_confirmation_message_structure():
-    msg = _format_confirmation_message(PARSED_AGLIO)
-    assert "알리오 올리오" in msg
-    assert "pasta" in msg
-    assert "마늘 한 큰술은 약 9g" in msg
-    assert "소금 조금은 약 2g" in msg
-    assert "네 / 아니오" in msg  # 한국어 레시피명 → 한국어 응답
-
-def test_format_confirmation_message_no_reasoning():
-    parsed = {
-        "name": "Test",
-        "items": [
-            {"name": "pasta", "quantity": 100.0, "unit": "g",
-             "quantity_display": "100g", "reasoning": None}
-        ],
-    }
-    msg = _format_confirmation_message(parsed)
-    assert "pasta" in msg
-    # ingredient line should have no reasoning parentheses
-    ingredient_line = [l for l in msg.split("\n") if "pasta" in l][0]
-    assert "(" not in ingredient_line
+_AGLIO_ITEMS = [
+    {"name": "pasta", "quantity": 120.0, "unit": "g", "quantity_display": "파스타 120g"},
+    {"name": "garlic", "quantity": 9.0, "unit": "g", "quantity_display": "마늘 한 큰술"},
+]
 
 
-# ── unit: pending recipe helpers ──────────────────────────────────────────────
+# ── tool use: recipe registration ────────────────────────────────────────────
 
-def test_save_and_get_pending_recipe(db_session):
-    _save_pending_recipe(db_session, "sess-cr-001", PARSED_AGLIO)
-    result = _get_pending_recipe(db_session, "sess-cr-001")
-    assert result is not None
-    assert result["name"] == "알리오 올리오"
-    assert len(result["items"]) == 3
+def test_recipe_tool_use_saves_recipe(client, db_session):
+    """Claude calls register_recipe → recipe appears in DB."""
+    tool_msg = _tool_use_message("cr-Aglio Olio-01", 15.0, _AGLIO_ITEMS)
+    final_msg = _text_message("Great! Aglio Olio has been registered.")
 
-def test_save_pending_clears_previous(db_session):
-    _save_pending_recipe(db_session, "sess-cr-002", PARSED_AGLIO)
-    new_data = {**PARSED_AGLIO, "name": "Updated"}
-    _save_pending_recipe(db_session, "sess-cr-002", new_data)
-
-    count = (
-        db_session.query(ChatHistory)
-        .filter_by(session_id="sess-cr-002", role="pending_recipe")
-        .count()
-    )
-    assert count == 1
-    assert _get_pending_recipe(db_session, "sess-cr-002")["name"] == "Updated"
-
-def test_get_pending_returns_none_when_empty(db_session):
-    assert _get_pending_recipe(db_session, "sess-cr-no-pending") is None
-
-
-# ── endpoint: full registration flow ─────────────────────────────────────────
-
-def test_chat_recipe_register_creates_pending(client, db_session):
-    with patch("routers.chat.extract_recipe_from_chat", return_value=PARSED_AGLIO):
+    with patch("routers.chat.chat_with_claude", side_effect=[tool_msg, final_msg]):
         resp = client.post("/api/chat/message", json={
-            "session_id": "sess-cr-reg-01",
-            "messages": [{"role": "user", "content": "알리오 올리오 레시피 등록해줘"}],
+            "session_id": "sess-cr-tool-01",
+            "messages": [{"role": "user", "content": "yes, register it"}],
         })
 
     assert resp.status_code == 200
-    reply = resp.json()["reply"]
-    assert "알리오 올리오" in reply
-    assert "마늘 한 큰술은 약 9g" in reply
-    assert "네 / 아니오" in reply  # 한국어 레시피명 → 한국어 응답
+    assert "registered" in resp.json()["reply"].lower()
 
-    pending = _get_pending_recipe(db_session, "sess-cr-reg-01")
-    assert pending is not None
-    assert pending["name"] == "알리오 올리오"
-
-
-def test_chat_recipe_confirm_saves_recipe(client, db_session):
-    ing = Ingredient(name="cr-garlic-99", unit="g", current_stock=100.0)
-    db_session.add(ing)
-    db_session.flush()
-
-    parsed = {
-        "name": "cr-Aglio Olio-99",
-        "items": [
-            {"name": "cr-garlic-99", "quantity": 9.0, "unit": "g",
-             "quantity_display": "한 큰술", "reasoning": "약 9g"},
-            {"name": "cr-new-pasta-99", "quantity": 120.0, "unit": "g",
-             "quantity_display": "120g", "reasoning": None},
-        ],
-    }
-    _save_pending_recipe(db_session, "sess-cr-cnf-01", parsed)
-
-    resp = client.post("/api/chat/message", json={
-        "session_id": "sess-cr-cnf-01",
-        "messages": [{"role": "user", "content": "응"}],
-    })
-
-    assert resp.status_code == 200
-    reply = resp.json()["reply"]
-    assert "has been added!" in reply  # 영어 레시피명 → 영어 응답
-
-    recipe = db_session.query(Recipe).filter_by(name="cr-Aglio Olio-99").first()
+    recipe = db_session.query(Recipe).filter_by(name="cr-Aglio Olio-01").first()
     assert recipe is not None
+    assert recipe.price == 15.0
     links = db_session.query(RecipeIngredient).filter_by(recipe_id=recipe.id).all()
     assert len(links) == 2
 
-    assert _get_pending_recipe(db_session, "sess-cr-cnf-01") is None
 
-
-def test_chat_recipe_reject_clears_pending(client, db_session):
-    _save_pending_recipe(db_session, "sess-cr-rej-01", PARSED_AGLIO)
-
-    resp = client.post("/api/chat/message", json={
-        "session_id": "sess-cr-rej-01",
-        "messages": [{"role": "user", "content": "아니"}],
-    })
-
-    assert resp.status_code == 200
-    assert "취소" in resp.json()["reply"]
-    assert _get_pending_recipe(db_session, "sess-cr-rej-01") is None
-
-
-def test_chat_recipe_duplicate_name_returns_warning(client, db_session):
-    db_session.add(Recipe(name="cr-Dup Recipe-99", price=0.0))
+def test_recipe_tool_use_links_existing_ingredient(client, db_session):
+    """Fuzzy match finds existing ingredient → linked, not duplicated."""
+    ing = Ingredient(name="cr-pasta-02", unit="g", current_stock=500.0)
+    db_session.add(ing)
     db_session.flush()
 
-    parsed = {**PARSED_AGLIO, "name": "cr-Dup Recipe-99"}
-    _save_pending_recipe(db_session, "sess-cr-dup-01", parsed)
+    items = [{"name": "cr-pasta-02", "quantity": 120.0, "unit": "g", "quantity_display": "120g"}]
+    tool_msg = _tool_use_message("cr-Simple Pasta-02", 12.0, items)
+    final_msg = _text_message("Done! cr-Simple Pasta-02 added.")
 
-    resp = client.post("/api/chat/message", json={
-        "session_id": "sess-cr-dup-01",
-        "messages": [{"role": "user", "content": "네"}],
-    })
+    with patch("routers.chat.chat_with_claude", side_effect=[tool_msg, final_msg]):
+        resp = client.post("/api/chat/message", json={
+            "session_id": "sess-cr-tool-02",
+            "messages": [{"role": "user", "content": "yes"}],
+        })
 
     assert resp.status_code == 200
-    assert "cr-Dup Recipe-99" in resp.json()["reply"]
+    recipe = db_session.query(Recipe).filter_by(name="cr-Simple Pasta-02").first()
+    assert recipe is not None
+    link = db_session.query(RecipeIngredient).filter_by(recipe_id=recipe.id).first()
+    assert link.ingredient_id == ing.id
 
 
-def test_chat_recipe_history_excludes_pending(client, db_session):
-    _save_pending_recipe(db_session, "sess-cr-hist-01", PARSED_AGLIO)
+def test_recipe_tool_duplicate_name_returns_error_in_reply(client, db_session):
+    """Duplicate name → ValueError → tool_result error → Claude replies with error info."""
+    db_session.add(Recipe(name="cr-Dup Recipe-03", price=0.0))
+    db_session.flush()
 
-    resp = client.get("/api/chat/history/sess-cr-hist-01")
+    tool_msg = _tool_use_message("cr-Dup Recipe-03", 10.0, _AGLIO_ITEMS)
+    final_msg = _text_message("That recipe already exists. Would you like a different name?")
+
+    with patch("routers.chat.chat_with_claude", side_effect=[tool_msg, final_msg]):
+        resp = client.post("/api/chat/message", json={
+            "session_id": "sess-cr-dup-03",
+            "messages": [{"role": "user", "content": "yes"}],
+        })
+
     assert resp.status_code == 200
-    roles = [entry["role"] for entry in resp.json()]
+    recipe_count = db_session.query(Recipe).filter_by(name="cr-Dup Recipe-03").count()
+    assert recipe_count == 1
+
+
+def test_normal_chat_no_tool_call(client, db_session):
+    """Non-registration message → text reply, no second Claude call, no recipe created."""
+    text_msg = _text_message("Stock levels look healthy this week!")
+
+    before = db_session.query(Recipe).count()
+    with patch("routers.chat.chat_with_claude", return_value=text_msg) as mock_claude:
+        resp = client.post("/api/chat/message", json={
+            "session_id": "sess-cr-normal-04",
+            "messages": [{"role": "user", "content": "how's inventory?"}],
+        })
+
+    assert resp.status_code == 200
+    assert resp.json()["reply"] == "Stock levels look healthy this week!"
+    assert mock_claude.call_count == 1
+    assert db_session.query(Recipe).count() == before
+
+
+def test_history_saved_after_tool_use(client, db_session):
+    """After tool use, the final text reply (not tool internals) is saved to history."""
+    tool_msg = _tool_use_message("cr-History Test-05", 8.0, _AGLIO_ITEMS)
+    final_msg = _text_message("Registered! Anything else?")
+
+    with patch("routers.chat.chat_with_claude", side_effect=[tool_msg, final_msg]):
+        client.post("/api/chat/message", json={
+            "session_id": "sess-cr-hist-05",
+            "messages": [{"role": "user", "content": "yes"}],
+        })
+
+    history = client.get("/api/chat/history/sess-cr-hist-05").json()
+    roles = [e["role"] for e in history]
+    assert "user" in roles
+    assert "assistant" in roles
     assert "pending_recipe" not in roles
-
-
-def test_chat_recipe_register_fallthrough_on_parse_error(client, db_session):
-    with patch("routers.chat.extract_recipe_from_chat", side_effect=ValueError("Claude error")):
-        with patch("routers.chat.chat_with_claude", return_value="Claude normal reply"):
-            resp = client.post("/api/chat/message", json={
-                "session_id": "sess-cr-fallback-01",
-                "messages": [{"role": "user", "content": "레시피 등록해줘"}],
-            })
-
-    assert resp.status_code == 200
-    assert resp.json()["reply"] == "Claude normal reply"
-    assert _get_pending_recipe(db_session, "sess-cr-fallback-01") is None
+    assistant_entry = next(e for e in history if e["role"] == "assistant")
+    assert assistant_entry["content"] == "Registered! Anything else?"

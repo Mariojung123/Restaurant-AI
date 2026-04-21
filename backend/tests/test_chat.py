@@ -1,8 +1,19 @@
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from models.database import Ingredient, Recipe, SalesLog
 from services.chat_context import build_context as _build_context
+
+
+def _text_message(text: str) -> MagicMock:
+    """Build a mock Message with a single TextBlock."""
+    block = MagicMock()
+    block.type = "text"
+    block.text = text
+    msg = MagicMock()
+    msg.stop_reason = "end_turn"
+    msg.content = [block]
+    return msg
 
 
 def test_chat_requires_session_id(client):
@@ -14,7 +25,7 @@ def test_chat_requires_session_id(client):
 
 
 def test_chat_saves_history(client, db_session):
-    with patch("routers.chat.chat_with_claude", return_value="Test reply"):
+    with patch("routers.chat.chat_with_claude", return_value=_text_message("Test reply")):
         resp = client.post(
             "/api/chat/message",
             json={
@@ -58,6 +69,5 @@ def test_chat_keyword_injects_sales(db_session):
 
 
 def test_chat_no_db_data_graceful(db_session):
-    # No ingredients in DB — inventory keyword should produce empty context
     context = _build_context(db_session, "재고 얼마야?")
     assert context == ""

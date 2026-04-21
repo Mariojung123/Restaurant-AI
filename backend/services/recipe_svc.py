@@ -2,7 +2,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, Recipe, RecipeIngredient
-from services.ingredient import create_ingredient
+from services.ingredient import FUZZY_MATCH_THRESHOLD, create_ingredient, fuzzy_match_ingredient
 
 
 def save_recipe_core(
@@ -58,6 +58,33 @@ def save_recipe_core(
         "ingredients_linked": linked,
         "ingredients_created": created,
     }
+
+
+def register_recipe_from_tool(
+    db: Session,
+    name: str,
+    price: float,
+    items: list[dict],
+) -> dict:
+    """Resolve ingredient names via fuzzy match, then delegate to save_recipe_core.
+
+    items: list of dicts with keys: name, quantity, unit, quantity_display.
+    Caller must db.commit() after this returns.
+    """
+    resolved = []
+    for item in items:
+        match, score = fuzzy_match_ingredient(db, item["name"])
+        ingredient = match if (match and score >= FUZZY_MATCH_THRESHOLD) else None
+        resolved.append(
+            {
+                "ingredient": ingredient,
+                "name": item["name"],
+                "quantity": item.get("quantity"),
+                "unit": item.get("unit", "ea"),
+                "quantity_display": item.get("quantity_display", str(item.get("quantity", ""))),
+            }
+        )
+    return save_recipe_core(db, name=name, description=None, price=price, resolved_items=resolved)
 
 
 def get_recipe_detail(db: Session, recipe_id: int) -> dict | None:

@@ -1,16 +1,19 @@
 """
 Claude API integration service.
 
-Wraps the Anthropic SDK with two primary helpers:
-- chat_with_claude: multi-turn text chat with a system prompt
-- parse_image_with_claude: vision-enabled single-turn extraction from a base64 image
+Wraps the Anthropic SDK with primary helpers:
+- chat_with_claude: multi-turn text chat with optional tool use
+- parse_recipe_ingredients: ingredient text → structured JSON
+- parse_image_with_claude: vision-enabled extraction from a base64 image
 """
 
 import os
 import json
 from typing import Optional
 
+import anthropic
 from anthropic import Anthropic
+from anthropic.types import Message
 
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
@@ -20,10 +23,45 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are a friendly AI operations partner for a small restaurant owner. "
     "Always respond in the same language the user writes in. "
     "Speak warmly and concisely, like a trusted colleague on a messenger app. "
-    "Help interpret sales, inventory, and ordering data, and proactively suggest next steps. "
-    "When the user asks to add or register a recipe, the system will automatically handle it — "
-    "just acknowledge naturally and let the system do the work."
+    "Help interpret sales, inventory, and ordering data, and proactively suggest next steps.\n\n"
+    "When a user wants to register a recipe: parse all ingredients into standard units (g, mL, ea), "
+    "present a clear summary with quantities, and ask for explicit confirmation. "
+    "Only call the register_recipe tool after the user clearly confirms (e.g. 'yes', '네', 'ok'). "
+    "If the user cancels or says no, acknowledge and do not call the tool."
 )
+
+RECIPE_TOOL: dict = {
+    "name": "register_recipe",
+    "description": (
+        "Register a new recipe to the database. "
+        "Always parse all ingredients with standard units first, present a full summary to the user, "
+        "and ask for explicit confirmation. Only call this tool after the user confirms."
+    ),
+    "input_schema": {
+        "type": "object",
+        "required": ["name", "price", "items"],
+        "properties": {
+            "name": {"type": "string", "description": "Recipe name"},
+            "price": {"type": "number", "description": "Price in CAD dollars"},
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["name", "quantity", "unit", "quantity_display"],
+                    "properties": {
+                        "name": {"type": "string", "description": "Ingredient name in English"},
+                        "quantity": {"type": "number"},
+                        "unit": {"type": "string", "enum": ["g", "mL", "ea"]},
+                        "quantity_display": {
+                            "type": "string",
+                            "description": "Original expression as user wrote it",
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
 
 _client: Optional[Anthropic] = None
 
@@ -49,21 +87,58 @@ def strip_fences(raw: str) -> str:
     return raw.strip()
 
 
+def extract_text(message: Message) -> str:
+    """Extract concatenated text from all TextBlock entries in a Message."""
+    return "".join(
+        block.text for block in message.content if block.type == "text"
+    ).strip()
+
+
+def extract_tool_use_block(message: Message) -> tuple[str, str, dict] | None:
+    """Return (tool_use_id, tool_name, input) for the first tool_use block, or None."""
+    for block in message.content:
+        if block.type == "tool_use":
+            return block.id, block.name, block.input
+    return None
+
+
+def message_content_to_dicts(content: list) -> list[dict]:
+    """Convert SDK content block objects to plain dicts for follow-up API calls."""
+    result = []
+    for block in content:
+        if block.type == "text":
+            result.append({"type": "text", "text": block.text})
+        elif block.type == "tool_use":
+            result.append(
+                {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+            )
+    return result
+
+
 def chat_with_claude(
     messages: list[dict],
     system_prompt: Optional[str] = None,
+    tools: Optional[list[dict]] = None,
     max_tokens: int = 1024,
-) -> str:
-    """Send a multi-turn chat to Claude and return the assistant text reply."""
-    client = _get_client()
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=max_tokens,
-        system=system_prompt or DEFAULT_SYSTEM_PROMPT,
-        messages=messages,
-    )
-    return "".join(getattr(b, "text", "") for b in response.content).strip()
+) -> Message:
+    """Send a multi-turn chat to Claude and return the raw Message object.
 
+    Callers inspect stop_reason and content to handle tool_use or text responses.
+    Raises RuntimeError on API failure.
+    """
+    client = _get_client()
+    kwargs: dict = {
+        "model": CLAUDE_MODEL,
+        "max_tokens": max_tokens,
+        "system": system_prompt or DEFAULT_SYSTEM_PROMPT,
+        "messages": messages,
+    }
+    if tools:
+        kwargs["tools"] = tools
+    try:
+        return client.messages.create(**kwargs)
+    except anthropic.APIError as e:
+        raise RuntimeError(f"Claude API error: {e}") from e
 
 
 _RECIPE_PARSE_SYSTEM = (
@@ -111,89 +186,6 @@ def parse_recipe_ingredients(ingredient_text: str) -> list[dict]:
     )
     raw = "".join(getattr(b, "text", "") for b in response.content).strip()
     return json.loads(strip_fences(raw))
-
-
-_RECIPE_CHAT_PARSE_SYSTEM = (
-    "You are a restaurant recipe extraction assistant. "
-    "Extract recipe name and ingredient info from a natural language chat message.\n\n"
-    "Always convert quantities to standard units (g, mL, or ea). "
-    "Use your culinary knowledge to estimate vague expressions "
-    "(e.g. 'a handful', '한 줌', 'a few cloves of garlic', 'a drizzle of oil', '한 큰술'). "
-    "Every ingredient must have a numeric quantity — never leave it as a vague string.\n\n"
-    "Return ONLY valid JSON, no markdown fences, no extra text:\n"
-    '{"name": "<recipe name in original language>", "price": <number or null>, "items": ['
-    '{"name": "<English ingredient name>", "quantity": <number>, "unit": "<g|mL|ea>", '
-    '"quantity_display": "<original expression exactly as written>", '
-    '"reasoning": "<English explanation IF vague unit was converted, e.g. \'a few cloves of garlic is about 15g\', else null>"}]}'
-)
-
-_RECIPE_CHAT_PARSE_PROMPT = "Extract the recipe name and ingredients from this message:\n\n{message}"
-
-
-def extract_recipe_from_chat(message: str, history: list[dict] | None = None) -> dict:
-    """Extract recipe name + parsed ingredients from a chat message.
-
-    history: recent chat turns passed as context so Claude can resolve references
-    like "register it" that point to a recipe discussed earlier in the conversation.
-    Returns {"name": str, "items": [{name, quantity, unit, quantity_display, reasoning}]}.
-    """
-    client = _get_client()
-    context_messages = list(history or [])[-10:]
-    context_messages.append(
-        {"role": "user", "content": _RECIPE_CHAT_PARSE_PROMPT.format(message=message)}
-    )
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=2048,
-        system=_RECIPE_CHAT_PARSE_SYSTEM,
-        messages=context_messages,
-    )
-    raw = "".join(getattr(b, "text", "") for b in response.content).strip()
-    data = json.loads(strip_fences(raw))
-    if "name" not in data or "items" not in data:
-        raise ValueError("Claude response missing required fields")
-    return data
-
-
-_RECIPE_UPDATE_SYSTEM = (
-    "You are a recipe modification assistant. "
-    "The user has a pending recipe awaiting confirmation and wants to change something before confirming.\n\n"
-    "Analyze the user message and return ONLY valid JSON, no markdown fences:\n"
-    '{"modified": false} — if the message is NOT a recipe modification, OR\n'
-    '{"modified": true, "price": <number or null>, "name": "<string or null>", "items": [<updated items array or null>]}'
-    " — if it IS a modification. "
-    "Use null for fields that did NOT change. "
-    "For items, use the same structure: "
-    '{"name": "<English ingredient name>", "quantity": <number>, "unit": "<g|ml|ea>", '
-    '"quantity_display": "<expression as written>", "reasoning": "<English explanation if vague, else null>"}. '
-    "Only include items array if at least one ingredient changed; otherwise use null."
-)
-
-_RECIPE_UPDATE_PROMPT = (
-    "Current pending recipe:\n{pending}\n\nUser message: {message}\n\n"
-    "Does this message modify the recipe? Return JSON as instructed."
-)
-
-
-def detect_recipe_update(pending: dict, user_message: str) -> Optional[dict]:
-    client = _get_client()
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=1024,
-        system=_RECIPE_UPDATE_SYSTEM,
-        messages=[
-            {
-                "role": "user",
-                "content": _RECIPE_UPDATE_PROMPT.format(
-                    pending=json.dumps(pending, ensure_ascii=False),
-                    message=user_message,
-                ),
-            }
-        ],
-    )
-    raw = "".join(getattr(b, "text", "") for b in response.content).strip()
-    data = json.loads(strip_fences(raw))
-    return data if data.get("modified") else None
 
 
 _VISION_EXTRACTION_SYSTEM = (
