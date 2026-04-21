@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from models.database import Ingredient, Recipe, SalesLog
 from services.claude import DEFAULT_SYSTEM_PROMPT
+from services.constants import CONTEXT_SECTION_FOOTER, CONTEXT_SECTION_HEADER
 from services.prediction import forecast_all
 
 INVENTORY_KEYWORDS = {"재고", "stock", "inventory", "ingredient", "떨어", "소진", "남은", "남았", "얼마나", "몇 kg", "몇kg"}
@@ -66,8 +67,8 @@ def build_system_prompt(context: str) -> str:
         return base
     return (
         DEFAULT_SYSTEM_PROMPT
-        + "\n\n--- Current restaurant data ---\n"
+        + f"\n\n{CONTEXT_SECTION_HEADER}\n"
         + context
-        + "\n--- End of data ---"
+        + f"\n{CONTEXT_SECTION_FOOTER}"
         + "\n\nAlways respond in the same language the user writes in."
     )

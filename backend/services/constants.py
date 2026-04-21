@@ -9,3 +9,6 @@ CHANGE_TYPE_PURCHASE = "purchase"
 AUTO_INVOICE_NOTE = "Auto-created from invoice scan"
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+CONTEXT_SECTION_HEADER = "--- Current restaurant data ---"
+CONTEXT_SECTION_FOOTER = "--- End of data ---"
