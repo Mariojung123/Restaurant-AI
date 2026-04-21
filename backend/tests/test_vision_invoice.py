@@ -310,6 +310,44 @@ def test_confirm_all_excluded_returns_zero(client, db_session):
     assert body["items"] == []
 
 
+# ── unit conversion integration tests ────────────────────────────────────────
+
+def test_process_invoice_items_cross_unit_g_to_kg(db_session):
+    """Invoice delivers in g, ingredient stored in kg — stock must convert."""
+    ing = Ingredient(name="uci-sugar-99", unit="kg", current_stock=1.0)
+    db_session.add(ing)
+    db_session.flush()
+
+    items = [{"name": "uci-sugar-99", "quantity": 500.0, "unit": "g",
+              "unit_price": None, "ingredient_id": ing.id}]
+    results = process_invoice_items(items, "Supplier", db_session)
+    db_session.flush()
+
+    db_session.expire_all()
+    updated = db_session.query(Ingredient).filter_by(id=ing.id).first()
+    # 500g = 0.5kg added to 1.0kg → 1.5kg
+    assert abs(updated.current_stock - 1.5) < 1e-6
+    # log stores raw delivery quantity
+    assert abs(results[0]["quantity"] - 500.0) < 1e-6
+
+
+def test_process_invoice_items_cross_unit_ml_to_l(db_session):
+    """Invoice delivers in mL, ingredient stored in L."""
+    ing = Ingredient(name="uci-vinegar-99", unit="L", current_stock=0.5)
+    db_session.add(ing)
+    db_session.flush()
+
+    items = [{"name": "uci-vinegar-99", "quantity": 750.0, "unit": "ml",
+              "unit_price": None, "ingredient_id": ing.id}]
+    results = process_invoice_items(items, "Supplier", db_session)
+    db_session.flush()
+
+    db_session.expire_all()
+    updated = db_session.query(Ingredient).filter_by(id=ing.id).first()
+    # 750mL = 0.75L added to 0.5L → 1.25L
+    assert abs(updated.current_stock - 1.25) < 1e-6
+
+
 # ── fuzzy match service unit test ─────────────────────────────────────────────
 
 def test_fuzzy_match_ingredient_exact(db_session):

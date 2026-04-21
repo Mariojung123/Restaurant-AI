@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, Recipe, RecipeIngredient, SalesLog
 from services.fuzzy_match import fuzzy_match
+from services.unit_convert import convert_quantity
 
 
 def fuzzy_match_recipe(db: Session, name: str) -> tuple:
@@ -18,9 +19,9 @@ def process_receipt_items(
         try:
             sold_at = datetime.strptime(sale_date, "%Y-%m-%d")
         except ValueError:
-            sold_at = datetime.utcnow()
+            sold_at = datetime.now(timezone.utc)
     else:
-        sold_at = datetime.utcnow()
+        sold_at = datetime.now(timezone.utc)
 
     results = []
     skipped_count = 0
@@ -60,7 +61,8 @@ def process_receipt_items(
                 continue
             ingredient = db.query(Ingredient).filter(Ingredient.id == ri.ingredient_id).first()
             if ingredient:
-                ingredient.current_stock -= ri.quantity * quantity
+                delta = convert_quantity(ri.quantity, ri.unit, ingredient.unit)
+                ingredient.current_stock -= delta * quantity
                 deducted += 1
 
         db.flush()

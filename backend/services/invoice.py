@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from models.database import Ingredient, InventoryLog
 from services.ingredient import create_ingredient, find_ingredient_by_name
+from services.unit_convert import convert_quantity
 
 # Re-export so existing callers don't break during transition
 from services.ingredient import fuzzy_match_ingredient  # noqa: F401
@@ -10,19 +11,20 @@ from services.ingredient import fuzzy_match_ingredient  # noqa: F401
 def _create_log(
     db: Session,
     ingredient: Ingredient,
-    quantity: float,
+    raw_quantity: float,
+    stock_delta: float,
     unit_cost,
     supplier,
 ) -> InventoryLog:
     log = InventoryLog(
         ingredient_id=ingredient.id,
         change_type="delivery",
-        quantity=quantity,
+        quantity=raw_quantity,
         unit_cost=unit_cost,
         supplier=supplier,
         note="Auto-created from invoice scan",
     )
-    ingredient.current_stock += quantity
+    ingredient.current_stock += stock_delta
     db.add(log)
     db.flush()
     return log
@@ -53,7 +55,8 @@ def process_invoice_items(items: list[dict], supplier, db: Session) -> list[dict
         if not ingredient:
             ingredient = create_ingredient(db, name, unit)
 
-        log = _create_log(db, ingredient, quantity, unit_price, supplier)
+        stock_delta = convert_quantity(quantity, unit, ingredient.unit)
+        log = _create_log(db, ingredient, quantity, stock_delta, unit_price, supplier)
         results.append(
             {
                 "name": name,

@@ -404,6 +404,66 @@ def test_process_receipt_items_skips_null_recipe(db_session):
     assert skipped == 1
 
 
+def test_process_receipt_items_cross_unit_conversion(db_session):
+    """Recipe ingredient in g, ingredient stored in kg — deduction must convert."""
+    ingredient = Ingredient(name="uct-flour-99", unit="kg", current_stock=2.0)
+    db_session.add(ingredient)
+    db_session.flush()
+
+    recipe = Recipe(name="uct-bread-99", price=5.0)
+    db_session.add(recipe)
+    db_session.flush()
+
+    ri = RecipeIngredient(
+        recipe_id=recipe.id,
+        ingredient_id=ingredient.id,
+        quantity=500.0,
+        unit="g",
+    )
+    db_session.add(ri)
+    db_session.flush()
+
+    items = [{"name": "uct-bread-99", "quantity": 1, "total_price": 5.0, "recipe_id": recipe.id}]
+    results, skipped = process_receipt_items(items, "2024-05-10", db_session)
+    db_session.flush()
+
+    assert skipped == 0
+    db_session.expire_all()
+    ing = db_session.query(Ingredient).filter_by(id=ingredient.id).first()
+    # 500g = 0.5kg deducted from 2.0kg → 1.5kg
+    assert abs(ing.current_stock - 1.5) < 1e-6
+
+
+def test_process_receipt_items_cross_unit_volume(db_session):
+    """Recipe ingredient in mL, ingredient stored in L."""
+    ingredient = Ingredient(name="uct-oil-99", unit="L", current_stock=1.0)
+    db_session.add(ingredient)
+    db_session.flush()
+
+    recipe = Recipe(name="uct-salad-99", price=8.0)
+    db_session.add(recipe)
+    db_session.flush()
+
+    ri = RecipeIngredient(
+        recipe_id=recipe.id,
+        ingredient_id=ingredient.id,
+        quantity=250.0,
+        unit="ml",
+    )
+    db_session.add(ri)
+    db_session.flush()
+
+    items = [{"name": "uct-salad-99", "quantity": 2, "total_price": 16.0, "recipe_id": recipe.id}]
+    results, skipped = process_receipt_items(items, "2024-05-10", db_session)
+    db_session.flush()
+
+    assert skipped == 0
+    db_session.expire_all()
+    ing = db_session.query(Ingredient).filter_by(id=ingredient.id).first()
+    # 250mL * 2 = 500mL = 0.5L deducted from 1.0L → 0.5L
+    assert abs(ing.current_stock - 0.5) < 1e-6
+
+
 def test_process_receipt_items_null_sale_date(db_session):
     recipe = Recipe(name="proc-no-date-dish-99", price=10.0)
     db_session.add(recipe)

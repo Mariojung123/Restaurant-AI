@@ -128,7 +128,8 @@ def _handle_recipe_register(
     db: Session, session_id: str, messages: list[ChatMessage], user_message: str
 ) -> Optional[ChatResponse]:
     try:
-        parsed = extract_recipe_from_chat(user_message)
+        history = load_history(db, session_id)
+        parsed = extract_recipe_from_chat(user_message, history=history)
         parsed["lang"] = "ko" if _has_korean(user_message) else "en"
         save_pending(db, session_id, parsed)
         reply = format_confirmation_message(parsed)

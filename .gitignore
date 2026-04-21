@@ -65,3 +65,4 @@ wheels/
 *.jpeg
 response_*.json
 test_*.html
+Test.txt
