@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getForecast } from '../api/inventory';
 import { urgencyLevel, isUrgent } from '../utils/dashboardUtils';
 
@@ -11,7 +11,7 @@ export function useDashboardForecast() {
   const [selectedItem, setSelectedItem] = useState(null);
   const cancelRef = useRef(null);
 
-  function loadForecast() {
+  const loadForecast = useCallback(() => {
     if (cancelRef.current) cancelRef.current();
     let cancelled = false;
     cancelRef.current = () => { cancelled = true; };
@@ -20,28 +20,28 @@ export function useDashboardForecast() {
     getForecast()
       .then((data) => { if (!cancelled) { setForecast(data); setStatus('ready'); } })
       .catch((err) => { if (!cancelled) { setError(err.message); setStatus('error'); } });
-  }
+  }, []);
 
   useEffect(() => {
     loadForecast();
     return () => { if (cancelRef.current) cancelRef.current(); };
-  }, []);
+  }, [loadForecast]);
 
-  function handleSelectItem(item) {
+  const handleSelectItem = useCallback((item) => {
     setSelectedItem((prev) =>
       prev?.ingredient_id === item.ingredient_id ? null : item
     );
-  }
+  }, []);
 
-  function handleUpdate() {
+  const handleUpdate = useCallback(() => {
     setSelectedItem(null);
     loadForecast();
-  }
+  }, [loadForecast]);
 
-  function handleDelete() {
+  const handleDelete = useCallback(() => {
     setSelectedItem(null);
     loadForecast();
-  }
+  }, [loadForecast]);
 
   const reorderItems = forecast.filter(isUrgent);
   const otherItems = forecast

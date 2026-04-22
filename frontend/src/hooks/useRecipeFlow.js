@@ -113,6 +113,7 @@ export function useRecipeFlow() {
       .filter((r) => r.ingredientId && r.quantity)
       .map((r) => {
         const ing = ingredients.find((i) => i.id === parseInt(r.ingredientId, 10));
+        if (!ing) return null;
         return {
           name: ing.name,
           quantity: parseFloat(r.quantity),
@@ -121,7 +122,8 @@ export function useRecipeFlow() {
           ingredient_id: ing.id,
           include: true,
         };
-      });
+      })
+      .filter(Boolean);
   }
 
   async function handleSelectRecipe(recipeId) {

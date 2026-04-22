@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { DASHBOARD_LOOKBACK_DAYS } from '../constants';
 import { useDashboardForecast } from '../hooks/useDashboardForecast';
 import ForecastCard from '../components/dashboard/ForecastCard';
@@ -16,29 +17,27 @@ function Dashboard() {
     setSelectedItem,
   } = useDashboardForecast();
 
-  function renderList(items) {
-    return (
-      <ul className="space-y-2">
-        {items.map((item) => (
-          <div key={item.ingredient_id} className="space-y-2">
-            <ForecastCard
+  const renderList = useCallback((items) => (
+    <ul className="space-y-2">
+      {items.map((item) => (
+        <div key={item.ingredient_id} className="space-y-2">
+          <ForecastCard
+            item={item}
+            isSelected={selectedItem?.ingredient_id === item.ingredient_id}
+            onSelect={handleSelectItem}
+          />
+          {selectedItem?.ingredient_id === item.ingredient_id && (
+            <IngredientDetailPanel
               item={item}
-              isSelected={selectedItem?.ingredient_id === item.ingredient_id}
-              onSelect={() => handleSelectItem(item)}
+              onClose={() => setSelectedItem(null)}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
             />
-            {selectedItem?.ingredient_id === item.ingredient_id && (
-              <IngredientDetailPanel
-                item={item}
-                onClose={() => setSelectedItem(null)}
-                onUpdate={handleUpdate}
-                onDelete={handleDelete}
-              />
-            )}
-          </div>
-        ))}
-      </ul>
-    );
-  }
+          )}
+        </div>
+      ))}
+    </ul>
+  ), [selectedItem, handleSelectItem, setSelectedItem, handleUpdate, handleDelete]);
 
   return (
     <section className="space-y-6">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { DASHBOARD_GAUGE_MULTIPLIER, DASHBOARD_LOOKBACK_OPTIONS } from '../../constants';
 import { useIngredientDetail } from '../../hooks/useIngredientDetail';
 import { formatStock, formatPurchaseDate } from './ForecastCard';
@@ -137,7 +137,7 @@ function DeleteConfirm({ ingredientId, onDeleted, onCancel }) {
   );
 }
 
-export default function IngredientDetailPanel({ item, onClose, onUpdate, onDelete }) {
+function IngredientDetailPanel({ item, onClose, onUpdate, onDelete }) {
   const {
     history,
     historyStatus,
@@ -245,3 +245,5 @@ export default function IngredientDetailPanel({ item, onClose, onUpdate, onDelet
     </div>
   );
 }
+
+export default memo(IngredientDetailPanel);

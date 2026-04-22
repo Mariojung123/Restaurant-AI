@@ -35,8 +35,13 @@ export function patch(path, body) {
 }
 
 export function del(path) {
-  return fetch(`${BASE}${path}`, { method: 'DELETE' }).then((res) => {
-    if (!res.ok) return res.json().then((d) => { throw new Error(d.detail ?? res.statusText); });
+  return fetch(`${BASE}${path}`, { method: 'DELETE' }).then(async (res) => {
+    if (!res.ok) {
+      const text = await res.text();
+      let detail;
+      try { detail = JSON.parse(text).detail; } catch { detail = null; }
+      throw new Error(detail ?? res.statusText);
+    }
   });
 }
 
