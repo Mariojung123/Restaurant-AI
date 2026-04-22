@@ -25,6 +25,7 @@ frontend/dev-dist/
 
 # Claude Code internal files
 .claude/
+.omc/
 CLAUDE.md
 INITIAL.md
 

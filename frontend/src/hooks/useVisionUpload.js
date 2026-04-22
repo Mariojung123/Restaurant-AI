@@ -4,6 +4,7 @@ export function useVisionUpload() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const fileInputRef = useRef(null);
+  const previewRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -14,8 +15,13 @@ export function useVisionUpload() {
   }, [preview]);
 
   function handleFileChange(f) {
+    if (previewRef.current) {
+      URL.revokeObjectURL(previewRef.current);
+    }
+    const nextPreview = URL.createObjectURL(f);
+    previewRef.current = nextPreview;
     setFile(f);
-    setPreview(URL.createObjectURL(f));
+    setPreview(nextPreview);
   }
 
   function reset() {

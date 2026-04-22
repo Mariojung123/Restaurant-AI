@@ -1,39 +1,25 @@
 import { useEffect, useState } from 'react';
+import { checkHealth } from '../api/settings';
+import { STORAGE_KEY_RESTAURANT_NAME } from '../constants';
 
-// Settings page: shows backend health and basic restaurant preferences.
 function Settings() {
   const [health, setHealth] = useState('unknown');
   const [restaurantName, setRestaurantName] = useState(
-    () => window.localStorage.getItem('restaurant_name') || ''
+    () => window.localStorage.getItem(STORAGE_KEY_RESTAURANT_NAME) || ''
   );
 
   useEffect(() => {
     let cancelled = false;
-
-    async function checkHealth() {
-      try {
-        const response = await fetch('/api/../health').catch(() => fetch('/health'));
-        if (response && response.ok) {
-          const data = await response.json();
-          if (!cancelled) setHealth(data.status || 'ok');
-        } else if (!cancelled) {
-          setHealth('unavailable');
-        }
-      } catch {
-        if (!cancelled) setHealth('unavailable');
-      }
-    }
-
-    checkHealth();
-    return () => {
-      cancelled = true;
-    };
+    checkHealth()
+      .then((data) => { if (!cancelled) setHealth(data.status || 'ok'); })
+      .catch(() => { if (!cancelled) setHealth('unavailable'); });
+    return () => { cancelled = true; };
   }, []);
 
   function handleNameChange(event) {
     const value = event.target.value;
     setRestaurantName(value);
-    window.localStorage.setItem('restaurant_name', value);
+    window.localStorage.setItem(STORAGE_KEY_RESTAURANT_NAME, value);
   }
 
   return (

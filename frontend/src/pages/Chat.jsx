@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import ChatBubble from '../components/ChatBubble.jsx';
 import { sendMessage, fetchHistory, clearHistory } from '../api/chat.js';
+import { STORAGE_KEY_CHAT_SESSION } from '../constants.js';
 
 const GREETING = {
   role: 'assistant',
   content: "Hi! I'm your restaurant partner. Ask me anything about sales, stock, or orders.",
 };
 
-const SESSION_KEY = 'chat_session_id';
-
 function getOrCreateSessionId() {
-  let id = localStorage.getItem(SESSION_KEY);
+  let id = localStorage.getItem(STORAGE_KEY_CHAT_SESSION);
   if (!id) {
     id = crypto.randomUUID();
-    localStorage.setItem(SESSION_KEY, id);
+    localStorage.setItem(STORAGE_KEY_CHAT_SESSION, id);
   }
   return id;
 }
@@ -67,8 +66,8 @@ function Chat() {
   async function handleClear() {
     try {
       await clearHistory(sessionId.current);
-    } catch {
-      // best-effort
+    } catch (err) {
+      console.warn('clear history failed:', err);
     }
     setMessages([GREETING]);
     setShowClearConfirm(false);
