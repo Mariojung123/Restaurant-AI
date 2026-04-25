@@ -1,20 +1,10 @@
-import { useEffect, useState } from 'react';
-import { checkHealth } from '../api/settings';
+import { useState } from 'react';
 import { STORAGE_KEY_RESTAURANT_NAME } from '../constants';
 
 function Settings() {
-  const [health, setHealth] = useState('unknown');
   const [restaurantName, setRestaurantName] = useState(
     () => window.localStorage.getItem(STORAGE_KEY_RESTAURANT_NAME) || ''
   );
-
-  useEffect(() => {
-    let cancelled = false;
-    checkHealth()
-      .then((data) => { if (!cancelled) setHealth(data.status || 'ok'); })
-      .catch(() => { if (!cancelled) setHealth('unavailable'); });
-    return () => { cancelled = true; };
-  }, []);
 
   function handleNameChange(event) {
     const value = event.target.value;
@@ -43,11 +33,6 @@ function Settings() {
         />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-sm font-medium text-slate-700">Backend status</p>
-        <p className="text-xs text-slate-500">Current health check result.</p>
-        <p className="mt-2 text-sm font-medium text-slate-900">{health}</p>
-      </div>
     </section>
   );
 }
