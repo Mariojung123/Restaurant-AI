@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { DASHBOARD_LOOKBACK_DAYS } from '../constants';
 import { useDashboardForecast } from '../hooks/useDashboardForecast';
 import ForecastCard from '../components/dashboard/ForecastCard';
@@ -17,7 +16,7 @@ function Dashboard() {
     setSelectedItem,
   } = useDashboardForecast();
 
-  const renderList = useCallback((items) => (
+  const renderList = (items) => (
     <ul className="space-y-2">
       {items.map((item) => (
         <div key={item.ingredient_id} className="space-y-2">
@@ -37,7 +36,7 @@ function Dashboard() {
         </div>
       ))}
     </ul>
-  ), [selectedItem, handleSelectItem, setSelectedItem, handleUpdate, handleDelete]);
+  );
 
   return (
     <section className="space-y-6">

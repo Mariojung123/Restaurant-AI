@@ -1,78 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useChatSession } from '../hooks/useChatSession.js';
 import ChatBubble from '../components/ChatBubble.jsx';
-import { sendMessage, fetchHistory, clearHistory } from '../api/chat.js';
-import { STORAGE_KEY_CHAT_SESSION } from '../constants.js';
-
-const GREETING = {
-  role: 'assistant',
-  content: "Hi! I'm your restaurant partner. Ask me anything about sales, stock, or orders.",
-};
-
-function getOrCreateSessionId() {
-  let id = localStorage.getItem(STORAGE_KEY_CHAT_SESSION);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(STORAGE_KEY_CHAT_SESSION, id);
-  }
-  return id;
-}
 
 function Chat() {
-  const sessionId = useRef(getOrCreateSessionId());
-  const [messages, setMessages] = useState([]);
-  const [historyStatus, setHistoryStatus] = useState('loading');
-  const [input, setInput] = useState('');
-  const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState(null);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    fetchHistory(sessionId.current)
-      .then((history) => {
-        setMessages(history.length > 0 ? history : [GREETING]);
-        setHistoryStatus('ready');
-      })
-      .catch(() => {
-        setMessages([GREETING]);
-        setHistoryStatus('ready');
-      });
-  }, []);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isSending]);
-
-  async function handleSend(event) {
-    event.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed || isSending) return;
-
-    setMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
-    setInput('');
-    setIsSending(true);
-    setError(null);
-
-    try {
-      const data = await sendMessage(sessionId.current, trimmed);
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
-    } catch (err) {
-      setError(err.message || 'Failed to reach the assistant.');
-    } finally {
-      setIsSending(false);
-    }
-  }
-
-  async function handleClear() {
-    try {
-      await clearHistory(sessionId.current);
-    } catch (err) {
-      console.warn('clear history failed:', err);
-    }
-    setMessages([GREETING]);
-    setShowClearConfirm(false);
-    setError(null);
-  }
+  const {
+    messages,
+    historyStatus,
+    input,
+    setInput,
+    isSending,
+    error,
+    showClearConfirm,
+    setShowClearConfirm,
+    bottomRef,
+    handleSend,
+    handleClear,
+  } = useChatSession();
 
   if (historyStatus === 'loading') {
     return (
