@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from models.database import get_db
 from services.invoice import fuzzy_match_ingredient, is_duplicate_invoice, process_invoice_items
+from services.invoice_history_svc import get_invoice_history
 from services.vision_common import call_vision_api, parse_vision_json, read_upload_file
 
 router = APIRouter()
@@ -92,6 +93,28 @@ class ConfirmRequest(BaseModel):
     items: list[ConfirmItem]
 
 
+class InvoiceHistoryItem(BaseModel):
+    ingredient_name: str
+    quantity: float
+    unit: str
+    unit_cost: Optional[float]
+    line_total: Optional[float]
+
+
+class InvoiceHistorySummary(BaseModel):
+    supplier: str
+    date: str
+    item_count: int
+    total_cost: Optional[float]
+    items: list[InvoiceHistoryItem]
+
+
+class InvoiceHistoryResponse(BaseModel):
+    this_week_total: Optional[float]
+    this_month_total: Optional[float]
+    invoices: list[InvoiceHistorySummary]
+
+
 def _parse_invoice_or_422(raw_text: str) -> InvoiceParseResult:
     try:
         return parse_vision_json(raw_text, InvoiceParseResult, "invoice")
@@ -174,6 +197,25 @@ async def confirm_invoice(
         invoice_date=body.invoice_date,
         items_processed=len(processed),
         items=[ProcessedItem(**p) for p in processed],
+    )
+
+
+@router.get("/history", response_model=InvoiceHistoryResponse)
+def invoice_history(db: Session = Depends(get_db)) -> InvoiceHistoryResponse:
+    result = get_invoice_history(db)
+    return InvoiceHistoryResponse(
+        this_week_total=result.this_week_total,
+        this_month_total=result.this_month_total,
+        invoices=[
+            InvoiceHistorySummary(
+                supplier=inv.supplier,
+                date=inv.date,
+                item_count=inv.item_count,
+                total_cost=inv.total_cost,
+                items=[InvoiceHistoryItem(**vars(item)) for item in inv.items],
+            )
+            for inv in result.invoices
+        ],
     )
 
 

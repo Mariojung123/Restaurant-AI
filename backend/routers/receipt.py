@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from models.database import get_db
 from services.receipt import fuzzy_match_recipe, is_duplicate_sale_date, process_receipt_items
+from services.receipt_history_svc import get_receipt_history
 from services.vision_common import call_vision_api, parse_vision_json, read_upload_file
 
 router = APIRouter()
@@ -84,6 +85,25 @@ class ConfirmResponse(BaseModel):
     items_processed: int
     items_skipped: int
     items: list[ResultItem]
+
+
+class ReceiptHistoryItem(BaseModel):
+    recipe_name: str
+    quantity: int
+    total_price: Optional[float]
+
+
+class ReceiptHistorySummary(BaseModel):
+    date: str
+    item_count: int
+    total_revenue: Optional[float]
+    items: list[ReceiptHistoryItem]
+
+
+class ReceiptHistoryResponse(BaseModel):
+    this_week_total: Optional[float]
+    this_month_total: Optional[float]
+    receipts: list[ReceiptHistorySummary]
 
 
 def _parse_receipt_or_422(raw_text: str) -> ReceiptParseResult:
@@ -171,4 +191,22 @@ async def confirm_receipt(
         items_processed=len(results),
         items_skipped=skipped_count,
         items=[ResultItem(**r) for r in results],
+    )
+
+
+@router.get("/history", response_model=ReceiptHistoryResponse)
+def receipt_history(db: Session = Depends(get_db)) -> ReceiptHistoryResponse:
+    result = get_receipt_history(db)
+    return ReceiptHistoryResponse(
+        this_week_total=result.this_week_total,
+        this_month_total=result.this_month_total,
+        receipts=[
+            ReceiptHistorySummary(
+                date=r.date,
+                item_count=r.item_count,
+                total_revenue=r.total_revenue,
+                items=[ReceiptHistoryItem(**vars(item)) for item in r.items],
+            )
+            for r in result.receipts
+        ],
     )
