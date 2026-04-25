@@ -38,7 +38,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/restaurant-ai
+            cd ~/Restaurant-AI
             git pull origin main
             echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" > .env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
