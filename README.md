@@ -4,7 +4,7 @@
 
 📄 **[View Full Project Specification](https://mariojung123.github.io/Restaurant-AI/restaurant-ai-spec-en.html)**
 
-📄 **[View Full Project Specification](http://107.22.165.29/chat)**
+✅ **[TRY Demo](http://107.22.165.29/chat)**
 
 
 ---
