@@ -22,7 +22,7 @@ jobs:
       - name: Run tests
         working-directory: backend
         env:
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: "sqlite:///:memory:"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: pytest -v
 
