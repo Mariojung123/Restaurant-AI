@@ -56,7 +56,7 @@ function ForecastCard({ item, isSelected, onSelect }) {
   const level = urgencyLevel(item);
   return (
     <li
-      className={`flex items-center justify-between rounded-lg border ${BORDER_COLOR[level]} bg-white px-4 py-3 shadow-sm cursor-pointer hover:bg-slate-50 transition-colors ${isSelected ? 'ring-2 ring-blue-300' : ''}`}
+      className={`flex items-center justify-between rounded-lg border ${BORDER_COLOR[level]} bg-white px-4 py-3 shadow-sm cursor-pointer hover:bg-slate-50 transition-colors ${isSelected ? 'ring-2 ring-brand-accent/40' : ''}`}
       onClick={() => onSelect(item)}
     >
       <div className="space-y-0.5">

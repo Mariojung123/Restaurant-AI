@@ -7,7 +7,7 @@ function UsageBar({ amount, max }) {
   const pct = max > 0 ? (amount / max) * 100 : 0;
   return (
     <div className="h-2 rounded-full overflow-hidden">
-      <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${pct}%` }} />
+      <div className="h-full rounded-full bg-brand-accent transition-all" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -54,13 +54,13 @@ function EditForm({ item, onSave, onCancel }) {
   }
 
   return (
-    <div className="border-t border-blue-200 pt-3 space-y-3">
+    <div className="border-t border-brand-accent/20 pt-3 space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <label className="space-y-1">
           <span className="text-xs text-slate-500">Current stock ({item.unit})</span>
           <input
             type="number"
-            className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
             value={stock}
             onChange={(e) => setStock(e.target.value)}
             disabled={saving}
@@ -70,7 +70,7 @@ function EditForm({ item, onSave, onCancel }) {
           <span className="text-xs text-slate-500">Reorder threshold ({item.unit})</span>
           <input
             type="number"
-            className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
             disabled={saving}
@@ -82,7 +82,7 @@ function EditForm({ item, onSave, onCancel }) {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+          className="rounded bg-brand-accent px-3 py-1 text-xs text-white hover:bg-brand-accent-dark disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save'}
         </button>
@@ -154,14 +154,14 @@ function IngredientDetailPanel({ item, onClose, onUpdate, onDelete }) {
   } = useIngredientDetail(item.ingredient_id, onUpdate, onDelete);
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+    <div className="rounded-lg border border-brand-accent/20 bg-brand-muted p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-blue-900">{item.ingredient_name}</h3>
+        <h3 className="text-sm font-semibold text-brand">{item.ingredient_name}</h3>
         <div className="flex items-center gap-2">
           {!showDeleteConfirm && (
             <button
               onClick={() => { setShowEdit((v) => !v); setShowDeleteConfirm(false); }}
-              className="rounded border border-blue-300 px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
+              className="rounded border border-brand-accent/30 px-2 py-0.5 text-xs text-brand-accent hover:bg-brand-muted"
             >
               {showEdit ? 'Cancel edit' : 'Edit'}
             </button>
@@ -183,8 +183,8 @@ function IngredientDetailPanel({ item, onClose, onUpdate, onDelete }) {
             onClick={() => setLookbackDays(days)}
             className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
               lookbackDays === days
-                ? 'bg-blue-600 text-white'
-                : 'border border-blue-300 text-blue-700 hover:bg-blue-100'
+                ? 'bg-brand-accent text-white'
+                : 'border border-brand-accent/30 text-brand-accent hover:bg-brand-muted'
             }`}
           >
             {days}d
@@ -225,7 +225,7 @@ function IngredientDetailPanel({ item, onClose, onUpdate, onDelete }) {
       )}
 
       {!showEdit && (
-        <div className="border-t border-blue-200 pt-3">
+        <div className="border-t border-brand-accent/20 pt-3">
           {showDeleteConfirm ? (
             <DeleteConfirm
               ingredientId={item.ingredient_id}

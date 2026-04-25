@@ -89,7 +89,7 @@ export function InvoiceReviewStep({ state, dispatch, loading, error, onConfirm }
                     fallbackOption="Create new"
                     fallbackValue={MATCH_SENTINEL.NEW}
                     noMatchLabel="✨ New ingredient"
-                    noMatchClass="text-blue-600"
+                    noMatchClass="text-brand-accent"
                   />
                 </td>
               </tr>

@@ -77,7 +77,7 @@ function Chat() {
         <button
           type="submit"
           disabled={isSending || !input.trim()}
-          className="rounded-full bg-brand-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="rounded-full bg-brand-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-accent-dark disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           Send
         </button>

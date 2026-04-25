@@ -46,7 +46,7 @@ function Invoice() {
             <span
               className={[
                 'rounded px-2 py-0.5 text-xs font-medium',
-                it.action === 'matched' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700',
+                it.action === 'matched' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
               ].join(' ')}
             >
               {it.action === 'matched' ? 'Existing' : 'New'}

@@ -7,3 +7,16 @@ body,
 #root {
   height: 100%;
 }
+
+@layer base {
+  body {
+    font-size: 1rem;
+    line-height: 1.6;
+    word-break: keep-all;
+  }
+
+  h1, h2, h3 {
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+}
