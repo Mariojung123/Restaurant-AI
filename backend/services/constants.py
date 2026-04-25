@@ -12,3 +12,6 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 CONTEXT_SECTION_HEADER = "--- Current restaurant data ---"
 CONTEXT_SECTION_FOOTER = "--- End of data ---"
+
+SALES_DEFAULT_PERIOD_DAYS = 7
+SALES_MAX_PERIOD_DAYS = 30

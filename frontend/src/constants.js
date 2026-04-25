@@ -12,6 +12,13 @@ export const STORAGE_KEY_CHAT_SESSION = 'chat_session_id';
 
 export const MATCH_SENTINEL = { NEW: '__new__', SKIP: '__skip__' };
 
+export const SALES_PERIOD_OPTIONS = [
+  { label: 'Today', days: 1 },
+  { label: '7 days', days: 7 },
+  { label: '30 days', days: 30 },
+];
+export const SALES_DEFAULT_PERIOD_DAYS = 7;
+
 export const RECIPE_STEP = { LIST: 'list', INPUT: 'input', DONE: 'done', DETAIL: 'detail', EDIT: 'edit' };
 export const RECIPE_UNITS = ['g', 'ml', 'ea', 'tsp', 'tbsp', 'oz', 'cup', 'kg', 'L'];
 export const RECIPE_EMPTY_FORM = { name: '', price: '', description: '' };

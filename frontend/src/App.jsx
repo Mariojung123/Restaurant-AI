@@ -6,6 +6,7 @@ import Invoice from './pages/Invoice.jsx';
 import Receipt from './pages/Receipt.jsx';
 import Recipe from './pages/Recipe.jsx';
 import Settings from './pages/Settings.jsx';
+import Sales from './pages/Sales.jsx';
 
 // Top-level shell: global navbar + routed page content.
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/recipe" element={<Recipe />} />
+          <Route path="/sales" element={<Sales />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/invoice" element={<Invoice />} />
           <Route path="/receipt" element={<Receipt />} />

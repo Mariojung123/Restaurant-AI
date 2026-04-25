@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import chat, inventory, vision, recipe
+from routers import chat, inventory, vision, recipe, sales
 from routers import invoice as invoice_router
 from routers import receipt as receipt_router
 from models.database import Base, engine
@@ -55,6 +55,7 @@ app.include_router(vision.router, prefix="/api/vision", tags=["vision"])
 app.include_router(invoice_router.router, prefix="/api/vision/invoice", tags=["invoice"])
 app.include_router(receipt_router.router, prefix="/api/vision/receipt", tags=["receipt"])
 app.include_router(recipe.router, prefix="/api/recipe", tags=["recipe"])
+app.include_router(sales.router, prefix="/api/sales", tags=["sales"])
 
 
 @app.get("/")
