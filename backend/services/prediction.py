@@ -13,7 +13,7 @@ from typing import Iterable, Optional
 from sqlalchemy.orm import Session
 
 from models.database import Ingredient, InventoryLog, RecipeIngredient, SalesLog
-from services.constants import CHANGE_TYPE_PURCHASE
+from services.constants import CHANGE_TYPE_DELIVERY
 from services.unit_convert import convert_quantity
 
 
@@ -89,7 +89,7 @@ def forecast_ingredient(
         depletion_date = None
 
     needs_reorder = ingredient.current_stock <= ingredient.reorder_threshold
-    purchase_log = last_purchase(db, ingredient.id)
+    purchase_log = last_delivery(db, ingredient.id)
     last_purchase_date = purchase_log.occurred_at if purchase_log else None
 
     return DepletionForecast(
@@ -153,13 +153,13 @@ def daily_usage_history(
     return result
 
 
-def last_purchase(db: Session, ingredient_id: int) -> Optional[InventoryLog]:
-    """Return the most recent purchase log for an ingredient, if any."""
+def last_delivery(db: Session, ingredient_id: int) -> Optional[InventoryLog]:
+    """Return the most recent delivery log for an ingredient, if any."""
     return (
         db.query(InventoryLog)
         .filter(
             InventoryLog.ingredient_id == ingredient_id,
-            InventoryLog.change_type == CHANGE_TYPE_PURCHASE,
+            InventoryLog.change_type == CHANGE_TYPE_DELIVERY,
         )
         .order_by(InventoryLog.occurred_at.desc())
         .first()

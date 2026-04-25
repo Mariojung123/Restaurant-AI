@@ -6,7 +6,7 @@ import { formatStock, formatPurchaseDate } from './ForecastCard';
 function UsageBar({ amount, max }) {
   const pct = max > 0 ? (amount / max) * 100 : 0;
   return (
-    <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+    <div className="h-2 rounded-full overflow-hidden">
       <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${pct}%` }} />
     </div>
   );
@@ -19,7 +19,7 @@ function StockGauge({ currentStock, reorderThreshold, unit, lastPurchaseDate }) 
 
   return (
     <div className="space-y-1">
-      <div className="relative h-3 rounded-full bg-slate-100 overflow-visible">
+      <div className="relative h-3 rounded-full overflow-visible">
         <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${fillPct}%` }} />
         {reorderThreshold > 0 && (
           <div
