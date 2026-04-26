@@ -64,6 +64,7 @@ wheels/
 *.png
 *.jpg
 *.jpeg
+!frontend/public/samples/*.png
 response_*.json
 test_*.html
 Test.txt
