@@ -62,6 +62,12 @@ function Receipt() {
 
   const toggleDate = (date) => setExpandedDate((prev) => (prev === date ? null : date));
 
+  const handleLoadSample = async () => {
+    const res = await fetch('/samples/receipt-sample.png');
+    const blob = await res.blob();
+    handleFileChange(new File([blob], 'receipt-sample.png', { type: 'image/png' }));
+  };
+
   return (
     <section className="space-y-6">
       <h1 className="text-xl font-semibold">Receipt Scan</h1>
@@ -95,6 +101,25 @@ function Receipt() {
           {loading ? 'Analyzing...' : 'Analyze'}
         </button>
       </div>
+
+      <div className="flex items-center gap-3 rounded-lg border border-stone-100 bg-stone-50 px-4 py-3">
+        <img
+          src="/samples/receipt-sample.png"
+          alt="sample receipt"
+          className="h-14 w-auto rounded border border-stone-200 object-contain shrink-0"
+        />
+        <div>
+          <p className="text-xs text-stone-400">Try with sample image</p>
+          <button
+            type="button"
+            onClick={handleLoadSample}
+            className="text-sm text-amber-700 underline hover:text-amber-900"
+          >
+            Load sample
+          </button>
+        </div>
+      </div>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {histStatus === 'ready' && histData && (
